@@ -35,7 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-  flutter_watchos: ^0.1.0-beta.1
+  flutter_watchos: ^0.1.0-beta.2
   sensors_plus: ^7.1.0
 
 dev_dependencies:
