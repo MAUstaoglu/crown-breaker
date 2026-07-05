@@ -57,6 +57,8 @@ class Ball {
   double vy;
   double radius;
   double speed;
+  bool attached;
+  double attachedOffset;
 
   Ball({
     required this.x,
@@ -65,6 +67,8 @@ class Ball {
     required this.vy,
     required this.radius,
     required this.speed,
+    this.attached = false,
+    this.attachedOffset = 0.0,
   });
 }
 

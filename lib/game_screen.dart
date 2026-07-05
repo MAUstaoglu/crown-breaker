@@ -76,7 +76,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   bool isShieldActive = false;
   double laserTimer = 0.0;
   double expandTimer = 0.0;
-  bool ballAttachedToPaddle = false;
+  bool get ballAttachedToPaddle => _balls.any((b) => b.attached);
 
   // Game elements
   final List<Ball> _balls = [];
@@ -267,7 +267,6 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     isStickyActive = false;
     isLaserActive = false;
     isShieldActive = false;
-    ballAttachedToPaddle = false;
     _comboCount = 0;
     final level = _levels[levelIdx];
     paddleWidth = 45.0 * level.paddleFactor;
@@ -380,6 +379,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
           vy: 0,
           radius: 3.5,
           speed: _baseBallSpeed,
+          attached: true,
         ),
       );
     } else {
@@ -391,10 +391,10 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
           vy: 0,
           radius: 3.5,
           speed: _baseBallSpeed,
+          attached: true,
         ),
       );
     }
-    ballAttachedToPaddle = true;
     _lives = 3;
     _score = 0;
   }
@@ -530,13 +530,13 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     for (int i = _balls.length - 1; i >= 0; i--) {
       final ball = _balls[i];
 
-      if (ballAttachedToPaddle && i == 0) {
-        // Keep the docked ball locked to the paddle.
+      if (ball.attached) {
+        // Keep the docked ball locked to the paddle at its offset.
         if (_verticalMode) {
           ball.x = _paddleX - ball.radius;
-          ball.y = paddleY + paddleWidth / 2;
+          ball.y = (paddleY + paddleWidth / 2 + ball.attachedOffset).clamp(paddleY, paddleY + paddleWidth);
         } else {
-          ball.x = paddleX + paddleWidth / 2;
+          ball.x = (paddleX + paddleWidth / 2 + ball.attachedOffset).clamp(paddleX, paddleX + paddleWidth);
           ball.y = _paddleY - ball.radius;
         }
         continue;
@@ -625,7 +625,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
           ? (ball.x - ball.radius > _screenWidth)
           : (ball.y - ball.radius > _screenHeight);
 
-      if (!ballAttachedToPaddle && outOfBounds) {
+      if (!ball.attached && outOfBounds) {
         _balls.removeAt(i);
         continue;
       }
@@ -659,7 +659,12 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
 
         if (isStickyActive) {
           setState(() {
-            ballAttachedToPaddle = true;
+            ball.attached = true;
+            if (_verticalMode) {
+              ball.attachedOffset = ball.y - (paddleY + paddleWidth / 2);
+            } else {
+              ball.attachedOffset = ball.x - (paddleX + paddleWidth / 2);
+            }
           });
           ball.vx = 0;
           ball.vy = 0;
@@ -720,6 +725,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
               vy: 0,
               radius: 3.5,
               speed: _baseBallSpeed,
+              attached: true,
             ),
           );
         } else {
@@ -731,12 +737,10 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
               vy: 0,
               radius: 3.5,
               speed: _baseBallSpeed,
+              attached: true,
             ),
           );
         }
-        setState(() {
-          ballAttachedToPaddle = true;
-        });
       }
     }
 
@@ -1048,14 +1052,23 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     if (_gameState == GameState.playing) {
       if (ballAttachedToPaddle && _balls.isNotEmpty) {
         setState(() {
-          ballAttachedToPaddle = false;
           isStickyActive = false; // Consume sticky.
-          if (_verticalMode) {
-            _balls.first.vx = -1.0;
-            _balls.first.vy = -0.2 + _random.nextDouble() * 0.4;
-          } else {
-            _balls.first.vx = -0.2 + _random.nextDouble() * 0.4;
-            _balls.first.vy = -1.0;
+          for (final ball in _balls) {
+            if (ball.attached) {
+              ball.attached = false;
+              if (_verticalMode) {
+                final hitPoint = (ball.y - paddleY) / paddleWidth;
+                final angle = (hitPoint - 0.5) * 2.0 * (math.pi / 3.0);
+                ball.vx = -math.cos(angle);
+                ball.vy = math.sin(angle);
+              } else {
+                final hitPoint = (ball.x - paddleX) / paddleWidth;
+                final angle = (hitPoint - 0.5) * 2.0 * (math.pi / 3.0);
+                ball.vx = math.sin(angle);
+                ball.vy = -math.cos(angle);
+              }
+              ball.speed = _baseBallSpeed;
+            }
           }
           _sendHaptic("start");
         });
@@ -1079,13 +1092,20 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                 if (_verticalMode) {
                   targetPaddleY = (_screenHeight - paddleWidth) / 2;
                   paddleY = targetPaddleY;
-                  _balls.first.x = _paddleX - _balls.first.radius;
-                  _balls.first.y = _screenHeight / 2;
                 } else {
                   targetPaddleX = (_screenWidth - paddleWidth) / 2;
                   paddleX = targetPaddleX;
-                  _balls.first.x = _screenWidth / 2;
-                  _balls.first.y = _paddleY - _balls.first.radius;
+                }
+                for (final ball in _balls) {
+                  if (ball.attached) {
+                    if (_verticalMode) {
+                      ball.x = _paddleX - ball.radius;
+                      ball.y = paddleY + paddleWidth / 2 + ball.attachedOffset;
+                    } else {
+                      ball.x = paddleX + paddleWidth / 2 + ball.attachedOffset;
+                      ball.y = _paddleY - ball.radius;
+                    }
+                  }
                 }
               }
             }
@@ -1110,15 +1130,19 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                               targetPaddleY += details.delta.dy;
                               targetPaddleY = targetPaddleY.clamp(kPaddleClamp, _screenHeight - paddleWidth - kPaddleClamp);
                               paddleY = targetPaddleY;
-                              if (ballAttachedToPaddle && _balls.isNotEmpty) {
-                                _balls.first.y = paddleY + paddleWidth / 2;
+                              for (final ball in _balls) {
+                                if (ball.attached) {
+                                  ball.y = paddleY + paddleWidth / 2 + ball.attachedOffset;
+                                }
                               }
                             } else {
                               targetPaddleX += details.delta.dx;
                               targetPaddleX = targetPaddleX.clamp(kPaddleClamp, _screenWidth - paddleWidth - kPaddleClamp);
                               paddleX = targetPaddleX; // Instant touch response.
-                              if (ballAttachedToPaddle && _balls.isNotEmpty) {
-                                _balls.first.x = paddleX + paddleWidth / 2;
+                              for (final ball in _balls) {
+                                if (ball.attached) {
+                                  ball.x = paddleX + paddleWidth / 2 + ball.attachedOffset;
+                                }
                               }
                             }
                             _repaintNotifier.repaint();
