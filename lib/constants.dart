@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'level_gen.dart';
+
 /// Inset of the playfield from the screen edge.
 const double kGameMargin = 6.0;
 
@@ -14,31 +16,12 @@ const double kPaddleClamp = 22.0;
 
 enum GameState { menu, levelSelect, levelIntro, playing, paused, gameOver, gameWon }
 
-/// Background tint for a given level (1-based). Falls back to the default
-/// dark background for unknown levels.
+/// Background tint for a given level (1-based): the level's world hue,
+/// deepening slightly toward the world's boss so a world reads as one arc.
 Color levelBackgroundColor(int level) {
-  switch (level) {
-    case 1:
-      return const Color(0xFF0A191D);
-    case 2:
-      return const Color(0xFF1D0A1C);
-    case 3:
-      return const Color(0xFF0E1C0A);
-    case 4:
-      return const Color(0xFF1D130A);
-    case 5:
-      return const Color(0xFF130A1D);
-    case 6:
-      return const Color(0xFF0A1D1A);
-    case 7:
-      return const Color(0xFF1D1B0A);
-    case 8:
-      return const Color(0xFF1F1805);
-    case 9:
-      return const Color(0xFF0A0E1C);
-    case 10:
-      return const Color(0xFF1C0A0A);
-    default:
-      return const Color(0xFF03030F);
-  }
+  final index = level - 1;
+  if (index < 0 || index >= kWorlds.length * 10) return const Color(0xFF03030F);
+  final world = kWorlds[index ~/ 10];
+  final step = index % 10;
+  return Color.lerp(world.background, Colors.black, 0.06 * step)!;
 }

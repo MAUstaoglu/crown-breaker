@@ -47,7 +47,15 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
 
   double get _paddleX => _screenWidth - kGameMargin - paddleHeight;
   double get _paddleY => _screenHeight - kGameMargin - paddleHeight;
-  double get _baseBallSpeed => 130.0 + _currentLevelIndex * 5.0;
+  double get _baseBallSpeed => 130.0 * _levels[_currentLevelIndex].speedFactor;
+
+  /// Seconds since the level started — drives ghost-brick phasing.
+  double _levelTime = 0.0;
+
+  /// Whether a brick currently collides: 'G' bricks phase 1.6s solid /
+  /// 0.8s spectral, rippling across the grid via their per-brick offset.
+  bool _brickSolid(Brick b) =>
+      b.type != 'G' || ((_levelTime + b.phase) % 2.4) < 1.6;
 
   // Paddle state
   double paddleX = 80.0;
@@ -240,15 +248,16 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     isShieldActive = false;
     ballAttachedToPaddle = false;
     _comboCount = 0;
-    paddleWidth = 45.0;
-    targetPaddleWidth = 45.0;
-
     final level = _levels[levelIdx];
+    paddleWidth = 45.0 * level.paddleFactor;
+    targetPaddleWidth = paddleWidth;
+    _levelTime = 0.0;
+
     final rows = level.layout.length;
 
     const double brickHeight = 8.0;
-    const double spacingX = 3.0;
-    const double spacingY = 3.0;
+    final double spacingX = level.spacing;
+    final double spacingY = level.spacing;
 
     int brickId = 0;
     for (int r = 0; r < rows; r++) {
@@ -268,19 +277,42 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
         int lives = 1;
         String type = 'N';
         Color color = level.themeColor;
+        double slideAmplitude = 10.0 * level.slideFactor;
+        double slideSpeed = 25.0 * level.slideFactor;
+        double phase = 0.0;
 
-        if (char == 'A') {
-          type = 'A';
-          lives = 2;
-          color = Color.lerp(level.themeColor, Colors.white, 0.4)!;
-        } else if (char == 'I') {
-          type = 'I';
-          lives = 9999; // Indestructible
-          color = const Color(0xFF8E8E93);
-        } else if (char == 'M') {
-          type = 'M';
-          lives = 1;
-          color = Colors.blueAccent;
+        switch (char) {
+          case 'A':
+            type = 'A';
+            lives = 2;
+            color = Color.lerp(level.themeColor, Colors.white, 0.4)!;
+          case 'H':
+            type = 'H';
+            lives = 3;
+            color = Color.lerp(level.themeColor, Colors.black, 0.45)!;
+          case 'I':
+            type = 'I';
+            lives = 9999; // Indestructible
+            color = const Color(0xFF8E8E93);
+          case 'M':
+            type = 'M';
+            color = Colors.blueAccent;
+          case 'F':
+            type = 'F';
+            color = Colors.lightBlue.shade200;
+            slideAmplitude *= 1.6;
+            slideSpeed *= 1.8;
+          case 'E':
+            type = 'E';
+            color = Colors.deepOrange;
+          case 'G':
+            type = 'G';
+            color = Color.lerp(level.themeColor, Colors.white, 0.15)!;
+            phase = (r + c) * 0.35; // Ripple, don't blink in unison.
+          case 'S':
+            type = 'S';
+            lives = 2;
+            color = const Color(0xFFF5E6A8); // Pale gold generator.
         }
 
         final double x = _verticalMode
@@ -303,10 +335,14 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
             baseColor: color,
             currentColor: color,
             slideDirection: (r % 2 == 0) ? 1.0 : -1.0,
+            slideAmplitude: slideAmplitude,
+            slideSpeed: slideSpeed,
+            phase: phase,
           ),
         );
       }
     }
+    _recomputeShields();
 
     // Center the paddle and dock the starting ball on it.
     targetPaddleX = (_screenWidth - paddleWidth) / 2;
@@ -430,20 +466,20 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       }
     }
 
-    // 4. Moving bricks ('M').
+    // 4. Level clock (ghost phasing) + moving bricks ('M' and fast 'F').
+    _levelTime += dt;
     for (final brick in _bricks) {
-      if (brick.type == 'M') {
-        final speed = dt * 25.0 * brick.slideDirection;
-        brick.slideOffset += speed;
-        if (brick.slideOffset.abs() > 10.0) {
+      if (brick.type == 'M' || brick.type == 'F') {
+        final step = dt * brick.slideSpeed * brick.slideDirection;
+        brick.slideOffset += step;
+        if (brick.slideOffset.abs() > brick.slideAmplitude) {
           brick.slideDirection *= -1.0;
         }
-        brick.rect = Rect.fromLTWH(
-          brick.rect.left + speed,
-          brick.rect.top,
-          brick.rect.width,
-          brick.rect.height,
-        );
+        // Slide along the row axis: screen-x in horizontal mode, screen-y in
+        // vertical (watch) mode, where the grid is transposed.
+        brick.rect = _verticalMode
+            ? brick.rect.translate(0, step)
+            : brick.rect.translate(step, 0);
       }
     }
 
@@ -456,6 +492,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       bool laserDestroyed = false;
       for (int b = _bricks.length - 1; b >= 0; b--) {
         final brick = _bricks[b];
+        if (!_brickSolid(brick)) continue; // Lasers pass through ghosts.
         if (brick.rect.contains(Offset(laser.x, laser.y))) {
           _damageBrick(brick, laser.x, laser.y);
           laserDestroyed = true;
@@ -625,6 +662,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       // Brick collisions.
       for (int b = _bricks.length - 1; b >= 0; b--) {
         final brick = _bricks[b];
+        if (!_brickSolid(brick)) continue; // Phased-out ghost: fly through.
         if (_checkBallBrickCollision(ball, brick)) {
           _sendHaptic("click");
           _damageBrick(brick, ball.x, ball.y);
@@ -802,9 +840,40 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     return false;
   }
 
+  /// Marks every brick adjacent (8-neighborhood) to a living 'S' generator as
+  /// shielded. Called at level start and whenever a generator dies.
+  void _recomputeShields() {
+    final generators = _bricks.where((b) => b.type == 'S' && b.lives > 0).toList();
+    for (final brick in _bricks) {
+      brick.shielded = brick.type != 'S' &&
+          brick.type != 'I' &&
+          generators.any((g) =>
+              (g.row - brick.row).abs() <= 1 && (g.col - brick.col).abs() <= 1);
+    }
+  }
+
+  /// Explosive chain: damages the four orthogonal grid neighbors of a dying
+  /// 'E' brick. Chains recurse through neighboring explosives.
+  void _explodeNeighbors(Brick source) {
+    _screenShake = math.max(_screenShake, 4.0);
+    final neighbors = _bricks
+        .where((b) =>
+            b != source &&
+            ((b.row - source.row).abs() + (b.col - source.col).abs()) == 1)
+        .toList();
+    for (final n in neighbors) {
+      _damageBrick(n, n.rect.center.dx, n.rect.center.dy);
+    }
+  }
+
   // Damage or destroy a brick and award score, particles, and power-ups.
   void _damageBrick(Brick brick, double hitX, double hitY) {
     if (brick.type == 'I' || brick.lives <= 0) return; // Indestructible or gone.
+    if (brick.shielded) {
+      // A generator protects this brick — ping off it, no damage.
+      _spawnExplosion(hitX, hitY, Colors.white70, count: 3);
+      return;
+    }
 
     brick.lives--;
     _comboCount++;
@@ -816,14 +885,22 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
         _score += pts;
       });
       _floatingScores.add(FloatingScore(x: brick.rect.center.dx, y: brick.rect.center.dy, score: pts, life: 1.0));
-      _spawnExplosion(brick.rect.center.dx, brick.rect.center.dy, brick.baseColor);
+      _spawnExplosion(brick.rect.center.dx, brick.rect.center.dy, brick.baseColor,
+          count: brick.type == 'E' ? 20 : 12);
+
+      if (brick.type == 'E') _explodeNeighbors(brick);
+      if (brick.type == 'S') _recomputeShields();
 
       if (_random.nextDouble() < 0.20) {
         _spawnPowerUp(brick.rect.center.dx, brick.rect.center.dy);
       }
     } else {
-      // Damaged armored brick reverts to the normal brick color.
-      brick.currentColor = _levels[_currentLevelIndex].themeColor;
+      // Damaged multi-hit brick brightens toward the theme color per hit.
+      final progress = (brick.maxLives - brick.lives) / brick.maxLives;
+      brick.currentColor = brick.type == 'A'
+          ? _levels[_currentLevelIndex].themeColor
+          : Color.lerp(brick.baseColor, _levels[_currentLevelIndex].themeColor,
+              progress)!;
       final pts = 50 * comboMult;
       setState(() {
         _score += pts;
@@ -1171,8 +1248,13 @@ class _GamePainter extends CustomPainter {
 
     // 1. Bricks.
     for (final brick in state._bricks) {
+      // Ghost bricks fade toward transparency while phased out.
+      final bool solid = state._brickSolid(brick);
+      final double ghostAlpha = brick.type == 'G' ? (solid ? 0.95 : 0.22) : 1.0;
+
       _fillPaint
-        ..color = brick.currentColor
+        ..color = brick.currentColor.withValues(
+            alpha: brick.currentColor.a * ghostAlpha)
         ..style = PaintingStyle.fill
         ..maskFilter = null;
 
@@ -1180,11 +1262,44 @@ class _GamePainter extends CustomPainter {
       canvas.drawRRect(rrect, _fillPaint);
 
       _strokePaint
-        ..color = (brick.type == 'I') ? Colors.white54 : brick.baseColor.withValues(alpha: 0.9)
+        ..color = (brick.type == 'I')
+            ? Colors.white54
+            : brick.baseColor.withValues(alpha: 0.9 * ghostAlpha)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0
         ..maskFilter = null;
       canvas.drawRRect(rrect, _strokePaint);
+
+      // Shield-generator halo, and a white shimmer on protected bricks.
+      if (brick.type == 'S') {
+        final pulse = 0.5 + 0.5 * math.sin(state._levelTime * 4.0);
+        _strokePaint
+          ..color = const Color(0xFFF5E6A8).withValues(alpha: 0.35 + 0.3 * pulse)
+          ..strokeWidth = 1.5
+          ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 3.0);
+        canvas.drawRRect(rrect.inflate(1.5), _strokePaint);
+        _strokePaint.maskFilter = null;
+      } else if (brick.shielded) {
+        _strokePaint
+          ..color = Colors.white.withValues(alpha: 0.55)
+          ..strokeWidth = 0.8;
+        canvas.drawRRect(rrect.deflate(0.5), _strokePaint);
+      }
+
+      // Explosive core dot.
+      if (brick.type == 'E') {
+        _fillPaint..color = Colors.yellowAccent..style = PaintingStyle.fill;
+        canvas.drawCircle(brick.rect.center, 1.6, _fillPaint);
+      }
+
+      // Heavy bricks carry two rivet notches; they brighten as they crack.
+      if (brick.type == 'H') {
+        _fillPaint..color = Colors.white38..style = PaintingStyle.fill;
+        canvas.drawCircle(
+            Offset(brick.rect.left + 3, brick.rect.center.dy), 0.9, _fillPaint);
+        canvas.drawCircle(
+            Offset(brick.rect.right - 3, brick.rect.center.dy), 0.9, _fillPaint);
+      }
 
       // Crack overlay for damaged armored bricks.
       if (brick.type == 'A' && brick.lives == 1) {
