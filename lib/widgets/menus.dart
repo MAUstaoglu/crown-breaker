@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../constants.dart';
 import '../models.dart';
 
 /// The title screen: logo, high score, and the Play / orientation buttons.
@@ -133,7 +134,7 @@ class LevelSelectView extends StatelessWidget {
               ),
               itemBuilder: (context, index) {
                 final lvl = levels[index];
-                final isLocked = index > maxUnlockedLevel;
+                final isLocked = !kUnlockAllLevels && index > maxUnlockedLevel;
                 final stars = levelStars[index] ?? 0;
                 return InkWell(
                   onTap: isLocked ? null : () => onSelect(index),

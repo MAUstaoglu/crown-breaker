@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'level_gen.dart';
 
+/// Set to true to unlock all 100 levels for testing/debugging.
+const bool kUnlockAllLevels = true;
+
 /// Inset of the playfield from the screen edge.
 const double kGameMargin = 6.0;
 

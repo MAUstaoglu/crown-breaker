@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_watchos/flutter_watchos.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -103,19 +104,20 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     super.initState();
     _loadSaveData();
 
-    // Wire up the Digital Crown platform channel using flutter_watchos.
-    _crownSubscription = WatchCrown.instance.rotations.listen((event) {
-      if (_gameState == GameState.playing) {
-        _onCrownRotated(event.delta);
-      }
-    });
-
     // Default to horizontal mode on iOS (iPhone/iPad), but keep vertical mode on watchOS.
     if (FlutterWatchosPlatform.isIos) {
       _verticalMode = false;
       _initGyroscope();
     } else if (FlutterWatchosPlatform.isWatch) {
       _verticalMode = true;
+      // Hide system status bar / clock on watchOS.
+      WatchStatusBar.hidden = true;
+      // Wire up the Digital Crown platform channel using flutter_watchos (only on Watch).
+      _crownSubscription = WatchCrown.instance.rotations.listen((event) {
+        if (_gameState == GameState.playing) {
+          _onCrownRotated(event.delta);
+        }
+      });
     }
 
     _ticker = createTicker(_onTick);
@@ -160,29 +162,48 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     });
   }
 
-  // Trigger the watch's tactile haptic engine using the flutter_watchos plugin.
+  // Trigger tactile haptic feedback (Watch Taptic Engine or iOS HapticFeedback).
   void _sendHaptic(String type) {
-    switch (type) {
-      case 'start':
-        WatchHaptics.play(WatchHapticType.start);
-        break;
-      case 'click':
-        WatchHaptics.play(WatchHapticType.click);
-        break;
-      case 'success':
-        WatchHaptics.play(WatchHapticType.success);
-        break;
-      case 'retry':
-        WatchHaptics.play(WatchHapticType.retry);
-        break;
-      case 'failure':
-        WatchHaptics.play(WatchHapticType.failure);
-        break;
-      case 'stop':
-        WatchHaptics.play(WatchHapticType.stop);
-        break;
-      default:
-        WatchHaptics.play(WatchHapticType.click);
+    if (FlutterWatchosPlatform.isWatch) {
+      switch (type) {
+        case 'start':
+          WatchHaptics.play(WatchHapticType.start);
+          break;
+        case 'click':
+          WatchHaptics.play(WatchHapticType.click);
+          break;
+        case 'success':
+          WatchHaptics.play(WatchHapticType.success);
+          break;
+        case 'retry':
+          WatchHaptics.play(WatchHapticType.retry);
+          break;
+        case 'failure':
+          WatchHaptics.play(WatchHapticType.failure);
+          break;
+        case 'stop':
+          WatchHaptics.play(WatchHapticType.stop);
+          break;
+        default:
+          WatchHaptics.play(WatchHapticType.click);
+      }
+    } else {
+      // Haptics for iOS devices (iPhone/iPad).
+      switch (type) {
+        case 'start':
+        case 'success':
+          HapticFeedback.mediumImpact();
+          break;
+        case 'click':
+          HapticFeedback.selectionClick();
+          break;
+        case 'retry':
+          HapticFeedback.lightImpact();
+          break;
+        case 'failure':
+          HapticFeedback.heavyImpact();
+          break;
+      }
     }
   }
 
