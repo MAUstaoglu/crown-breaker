@@ -654,7 +654,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
         _sendHaptic("click");
         _screenShake = 2.0;
         // Gradually increase ball speed for tension.
-        ball.speed = (ball.speed + 2.0).clamp(_baseBallSpeed, 220.0);
+        ball.speed = (ball.speed + 2.0).clamp(_baseBallSpeed, math.max(_baseBallSpeed + 40.0, 220.0));
         _comboCount = 0; // Reset combo on paddle hit.
 
         if (isStickyActive) {
