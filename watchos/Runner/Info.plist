@@ -13,13 +13,13 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>crownbreaker</string>
+	<string>crown_breaker</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
-	<string>8</string>
+	<string>1</string>
 	<key>WKApplication</key>
 	<true/>
 	<key>WKWatchOnly</key>

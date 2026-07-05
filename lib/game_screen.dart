@@ -5,7 +5,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_watchos/flutter_watchos.dart';
 
 import 'constants.dart';
 import 'levels.dart';
@@ -84,9 +84,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   double _screenShake = 0.0;
   final math.Random _random = math.Random();
 
-  // Platform channels to the watch host
-  static const _crownChannel = BasicMessageChannel<String>('crown_channel', StringCodec());
-  static const _hapticsChannel = 'haptics_channel';
+  StreamSubscription<CrownRotationEvent>? _crownSubscription;
 
   final List<LevelData> _levels = kLevels;
 
@@ -95,15 +93,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     super.initState();
     _loadSaveData();
 
-    // Wire up the Digital Crown platform channel.
-    _crownChannel.setMessageHandler((String? message) async {
-      if (message != null && _gameState == GameState.playing) {
-        final double? delta = double.tryParse(message);
-        if (delta != null) {
-          _onCrownRotated(delta);
-        }
+    // Wire up the Digital Crown platform channel using flutter_watchos.
+    _crownSubscription = WatchCrown.instance.rotations.listen((event) {
+      if (_gameState == GameState.playing) {
+        _onCrownRotated(event.delta);
       }
-      return '';
     });
 
     _ticker = createTicker(_onTick);
@@ -111,6 +105,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    _crownSubscription?.cancel();
     _ticker.dispose();
     _repaintNotifier.dispose();
     super.dispose();
@@ -127,13 +122,30 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     }
   }
 
-  // Trigger the watch's tactile haptic engine.
+  // Trigger the watch's tactile haptic engine using the flutter_watchos plugin.
   void _sendHaptic(String type) {
-    final Uint8List bytes = Uint8List.fromList(utf8.encode(type));
-    ServicesBinding.instance.defaultBinaryMessenger.send(
-      _hapticsChannel,
-      ByteData.view(bytes.buffer),
-    );
+    switch (type) {
+      case 'start':
+        WatchHaptics.play(WatchHapticType.start);
+        break;
+      case 'click':
+        WatchHaptics.play(WatchHapticType.click);
+        break;
+      case 'success':
+        WatchHaptics.play(WatchHapticType.success);
+        break;
+      case 'retry':
+        WatchHaptics.play(WatchHapticType.retry);
+        break;
+      case 'failure':
+        WatchHaptics.play(WatchHapticType.failure);
+        break;
+      case 'stop':
+        WatchHaptics.play(WatchHapticType.stop);
+        break;
+      default:
+        WatchHaptics.play(WatchHapticType.click);
+    }
   }
 
   String get _savePath {

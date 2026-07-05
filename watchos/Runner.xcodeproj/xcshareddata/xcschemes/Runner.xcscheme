@@ -45,6 +45,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000000000000000000001"
             BuildableName = "Runner.app"
+            BlueprintName = "Runner"
             ReferencedContainer = "container:Runner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
