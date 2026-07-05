@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_watchos/flutter_watchos.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 import 'constants.dart';
 import 'levels.dart';
@@ -85,6 +86,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   final math.Random _random = math.Random();
 
   StreamSubscription<CrownRotationEvent>? _crownSubscription;
+  StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
 
   final List<LevelData> _levels = kLevels;
 
@@ -100,12 +102,21 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       }
     });
 
+    // Default to horizontal mode on iOS (iPhone/iPad), but keep vertical mode on watchOS.
+    if (FlutterWatchosPlatform.isIos) {
+      _verticalMode = false;
+      _initGyroscope();
+    } else if (FlutterWatchosPlatform.isWatch) {
+      _verticalMode = true;
+    }
+
     _ticker = createTicker(_onTick);
   }
 
   @override
   void dispose() {
     _crownSubscription?.cancel();
+    _gyroscopeSubscription?.cancel();
     _ticker.dispose();
     _repaintNotifier.dispose();
     super.dispose();
@@ -120,6 +131,25 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       targetPaddleX += delta * 0.3;
       targetPaddleX = targetPaddleX.clamp(kPaddleClamp, _screenWidth - paddleWidth - kPaddleClamp);
     }
+  }
+
+  // Initialize gyroscope sensor for tilt controls.
+  void _initGyroscope() {
+    _gyroscopeSubscription = gyroscopeEventStream().listen((event) {
+      if (_gameState == GameState.playing) {
+        setState(() {
+          if (_verticalMode) {
+            // Tilting phone forward/backward (pitch, rotation around X-axis) moves paddle up/down.
+            targetPaddleY += event.x * 12.0;
+            targetPaddleY = targetPaddleY.clamp(kPaddleClamp, _screenHeight - paddleWidth - kPaddleClamp);
+          } else {
+            // Tilting phone left/right (roll, rotation around Z-axis) moves paddle left/right.
+            targetPaddleX += event.z * 12.0;
+            targetPaddleX = targetPaddleX.clamp(kPaddleClamp, _screenWidth - paddleWidth - kPaddleClamp);
+          }
+        });
+      }
+    });
   }
 
   // Trigger the watch's tactile haptic engine using the flutter_watchos plugin.
