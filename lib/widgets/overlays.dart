@@ -110,13 +110,25 @@ class PlayingHud extends StatelessWidget {
           ),
         ),
         Positioned(
-          top: 13,
-          right: 20,
-          child: InkWell(
+          top: 9,
+          right: 16,
+          child: GestureDetector(
             onTap: onPause,
+            behavior: HitTestBehavior.opaque,
             child: Container(
-              padding: const EdgeInsets.all(4),
-              child: const Icon(Icons.pause, size: 8, color: Colors.white38),
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 0.5),
+              ),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.pause,
+                size: 9,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
