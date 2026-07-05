@@ -88,6 +88,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
 
   // Game loop ticker
   late Ticker _ticker;
+  final ScrollController _levelSelectScrollController = ScrollController();
   Duration _lastElapsed = Duration.zero;
 
   // Juice
@@ -116,6 +117,8 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       _crownSubscription = WatchCrown.instance.rotations.listen((event) {
         if (_gameState == GameState.playing) {
           _onCrownRotated(event.delta);
+        } else if (_gameState == GameState.levelSelect) {
+          _onLevelSelectCrownRotated(event.delta);
         }
       });
     }
@@ -128,6 +131,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     _crownSubscription?.cancel();
     _gyroscopeSubscription?.cancel();
     _ticker.dispose();
+    _levelSelectScrollController.dispose();
     _repaintNotifier.dispose();
     super.dispose();
   }
@@ -141,6 +145,19 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       targetPaddleX += delta * 0.3;
       targetPaddleX = targetPaddleX.clamp(kPaddleClamp, _screenWidth - paddleWidth - kPaddleClamp);
     }
+  }
+
+  // Scroll the level select grid using the Digital Crown.
+  void _onLevelSelectCrownRotated(double delta) {
+    if (!_levelSelectScrollController.hasClients) return;
+    // Positive delta means rolling crown clockwise (up/away from user), which scrolls down.
+    // Negative delta means rolling counter-clockwise, which scrolls up.
+    // 0.45 coefficient scales rotation delta to smooth scrolling offset changes.
+    final double newOffset = (_levelSelectScrollController.offset + delta * 0.45).clamp(
+      0.0,
+      _levelSelectScrollController.position.maxScrollExtent,
+    );
+    _levelSelectScrollController.jumpTo(newOffset);
   }
 
   // Initialize gyroscope sensor for tilt controls.
@@ -1174,6 +1191,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                           levels: _levels,
                           maxUnlockedLevel: _maxUnlockedLevel,
                           levelStars: _levelStars,
+                          controller: _levelSelectScrollController,
                           onSelect: (index) => _enterLevel(index),
                           onBack: () {
                             _sendHaptic("click");

@@ -97,6 +97,7 @@ class LevelSelectView extends StatelessWidget {
   final Map<int, int> levelStars;
   final void Function(int index) onSelect;
   final VoidCallback onBack;
+  final ScrollController? controller;
 
   const LevelSelectView({
     super.key,
@@ -105,6 +106,7 @@ class LevelSelectView extends StatelessWidget {
     required this.levelStars,
     required this.onSelect,
     required this.onBack,
+    this.controller,
   });
 
   @override
@@ -125,6 +127,7 @@ class LevelSelectView extends StatelessWidget {
           const SizedBox(height: 8),
           Expanded(
             child: GridView.builder(
+              controller: controller,
               itemCount: levels.length,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,

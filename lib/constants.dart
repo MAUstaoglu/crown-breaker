@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'level_gen.dart';
 
 /// Set to true to unlock all 100 levels for testing/debugging.
-const bool kUnlockAllLevels = true;
+const bool kUnlockAllLevels = false;
 
 /// Inset of the playfield from the screen edge.
 const double kGameMargin = 6.0;
@@ -17,7 +17,15 @@ const double kBrickTopMargin = 38.0;
 /// Minimum distance the paddle keeps from the playfield edges.
 const double kPaddleClamp = 22.0;
 
-enum GameState { menu, levelSelect, levelIntro, playing, paused, gameOver, gameWon }
+enum GameState {
+  menu,
+  levelSelect,
+  levelIntro,
+  playing,
+  paused,
+  gameOver,
+  gameWon,
+}
 
 /// Background tint for a given level (1-based): the level's world hue,
 /// deepening slightly toward the world's boss so a world reads as one arc.
