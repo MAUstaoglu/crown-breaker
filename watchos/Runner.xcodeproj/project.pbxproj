@@ -47,6 +47,8 @@
 		AF000000000000000000000A /* vm_isolate_snapshot.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = vm_isolate_snapshot.bin; sourceTree = "<group>"; };
 		AF000000000000000000000B /* isolate_snapshot.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = isolate_snapshot.bin; sourceTree = "<group>"; };
 		AF000000000000000000000C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AF000000000000000000000D /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		AF000000000000000000000E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,6 +101,8 @@
 				AF0000000000000000000006 /* icudtl.dat */,
 				AF000000000000000000000A /* vm_isolate_snapshot.bin */,
 				AF000000000000000000000B /* isolate_snapshot.bin */,
+				AF000000000000000000000D /* Debug.xcconfig */,
+				AF000000000000000000000E /* Release.xcconfig */,
 			);
 			path = Flutter;
 			sourceTree = "<group>";
@@ -209,6 +213,7 @@
 		};
 		BB0000000000000000000002 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AF000000000000000000000D /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -222,7 +227,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/Flutter";
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.crownBreaker.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.flutter-watchos.crownbreaker;
 				PRODUCT_NAME = Runner;
 				SWIFT_OBJC_BRIDGING_HEADER = Runner/Bridge.h;
 				SWIFT_VERSION = 5.0;
@@ -253,6 +258,7 @@
 		};
 		BB0000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AF000000000000000000000E /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -266,7 +272,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/Flutter";
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.crownBreaker.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.flutter-watchos.crownbreaker;
 				PRODUCT_NAME = Runner;
 				SWIFT_OBJC_BRIDGING_HEADER = Runner/Bridge.h;
 				SWIFT_VERSION = 5.0;
