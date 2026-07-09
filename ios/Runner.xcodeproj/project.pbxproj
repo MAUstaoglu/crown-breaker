@@ -98,18 +98,9 @@
 			children = (
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
-				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
+				A12659DDBAEB79D52412C956 /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		97C146EF1CF9000F007C117D /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				97C146EE1CF9000F007C117D /* Runner.app */,
-				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 		97C146F01CF9000F007C117D /* Runner */ = {
@@ -126,6 +117,13 @@
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		A12659DDBAEB79D52412C956 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -158,6 +156,7 @@
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
+				79CBC4A973E1035BD120776C /* Embed Prebuilt watchOS App */,
 			);
 			buildRules = (
 			);
@@ -201,9 +200,9 @@
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
 			packageReferences = (
-				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */,
+				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */,
 			);
-			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
+			productRefGroup = A12659DDBAEB79D52412C956 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -250,6 +249,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
+		};
+		79CBC4A973E1035BD120776C /* Embed Prebuilt watchOS App */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Prebuilt watchOS App";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "# Determine watchOS build configuration and directory\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n  WATCHOS_CONF=\"Release-watchos\"\nelse\n  WATCHOS_CONF=\"Debug-watchsimulator\"\nfi\n\nWATCHOS_APP_SRC=\"${SRCROOT}/../build/watchos/${WATCHOS_CONF}/Runner.app\"\nWATCHOS_APP_DST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Watch\"\n\nif [ -d \"$WATCHOS_APP_SRC\" ]; then\n  mkdir -p \"$WATCHOS_APP_DST\"\n  cp -R \"$WATCHOS_APP_SRC\" \"$WATCHOS_APP_DST/\"\n  echo \"Successfully copied watchOS app from $WATCHOS_APP_SRC to $WATCHOS_APP_DST\"\nelse\n  echo \"Warning: watchOS app bundle not found at $WATCHOS_APP_SRC. Please run the watchOS build first (e.g. 'flutter-watchos build watchos --release' or '--simulator').\"\nfi\n";
 		};
 		9740EEB61CF901F6004384FC /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -630,7 +648,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */ = {
+		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage;
 		};

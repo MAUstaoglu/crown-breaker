@@ -65,7 +65,7 @@
 		AF0000000000000000000004 /* App.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = App.framework; sourceTree = "<group>"; };
 		AF0000000000000000000005 /* flutter_assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = flutter_assets; sourceTree = "<group>"; };
 		AF0000000000000000000006 /* icudtl.dat */ = {isa = PBXFileReference; lastKnownFileType = file; path = icudtl.dat; sourceTree = "<group>"; };
-		AF0000000000000000000007 /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AF0000000000000000000007 /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = Runner.app; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF0000000000000000000008 /* Bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Bridge.h; sourceTree = "<group>"; };
 		AF000000000000000000000A /* vm_isolate_snapshot.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = vm_isolate_snapshot.bin; sourceTree = "<group>"; };
 		AF000000000000000000000B /* isolate_snapshot.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = isolate_snapshot.bin; sourceTree = "<group>"; };

@@ -4,4 +4,7 @@
    <FileRef
       location = "group:Runner.xcodeproj">
    </FileRef>
+   <FileRef
+      location = "group:../watchos/Runner.xcodeproj">
+   </FileRef>
 </Workspace>
