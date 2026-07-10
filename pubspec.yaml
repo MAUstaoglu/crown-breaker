@@ -38,6 +38,9 @@ dependencies:
   flutter_watchos: ^0.1.0-beta.2
   sensors_plus: ^7.1.0
 
+  # tvOS: platform detection + Siri Remote (RCU) input.
+  flutter_tvos: ^1.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

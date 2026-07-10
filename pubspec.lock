@@ -83,14 +83,22 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_tvos:
+    dependency: "direct main"
+    description:
+      name: flutter_tvos
+      sha256: "1070c1f34af7aac69f907127da4ea4ab2a333bf9fa35050742a8a0a4a2920be8"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.2"
   flutter_watchos:
     dependency: "direct main"
     description:
       name: flutter_watchos
-      sha256: "3d1c67b9b96c5534423a211eb74ecbf5d5f64bd910c67a13d0b55309360737fe"
+      sha256: a44926d4ed6db496fd7e93ab102ddfcea6efeb33357fe1e173d9ecfc91340692
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-beta.2"
+    version: "0.1.0-beta.4"
   flutter_web_plugins:
     dependency: transitive
     description: flutter

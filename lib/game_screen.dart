@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_tvos/flutter_tvos.dart';
 import 'package:flutter_watchos/flutter_watchos.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -98,6 +99,10 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   StreamSubscription<CrownRotationEvent>? _crownSubscription;
   StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
 
+  // tvOS: Siri Remote (RCU) touch listener + last touch position for delta.
+  TvRemoteTouchListener? _remoteListener;
+  double? _lastRemoteX;
+
   final List<LevelData> _levels = kLevels;
 
   @override
@@ -105,8 +110,20 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     super.initState();
     _loadSaveData();
 
-    // Default to horizontal mode on iOS (iPhone/iPad), but keep vertical mode on watchOS.
-    if (FlutterWatchosPlatform.isIos) {
+    // tvOS check must come first: Platform.isIOS is true on tvOS (iOS-family),
+    // so FlutterWatchosPlatform.isIos would otherwise capture the Apple TV.
+    if (FlutterTvosPlatform.isTvos) {
+      // Apple TV is a landscape display — use horizontal mode like iPhone.
+      _verticalMode = false;
+      // Drive the paddle with the Siri Remote touch surface (the RCU analog of
+      // the Digital Crown). Menus/level-select navigate via the arrow-key and
+      // Select events the flutter_tvos native plugin emits, so the raw touch
+      // listener only needs to handle gameplay.
+      TvRemoteController.instance.init();
+      _remoteListener = _onRemoteTouch;
+      TvRemoteController.instance.addRawListener(_remoteListener!);
+    } else if (FlutterWatchosPlatform.isIos) {
+      // Default to horizontal mode on iOS (iPhone/iPad).
       _verticalMode = false;
       _initGyroscope();
     } else if (FlutterWatchosPlatform.isWatch) {
@@ -130,10 +147,50 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   void dispose() {
     _crownSubscription?.cancel();
     _gyroscopeSubscription?.cancel();
+    if (_remoteListener != null) {
+      TvRemoteController.instance.removeRawListener(_remoteListener!);
+    }
     _ticker.dispose();
     _levelSelectScrollController.dispose();
     _repaintNotifier.dispose();
     super.dispose();
+  }
+
+  // Map Siri Remote touchpad movement onto the game, reusing the Digital
+  // Crown handlers so tvOS shares the watch's paddle/scroll behavior.
+  //
+  // Touch coordinates are normalized to [-1, 1]; we track the delta between
+  // move events (like a crown rotation delta) and scale it to screen space.
+  void _onRemoteTouch(TvRemoteTouchEvent event) {
+    switch (event.phase) {
+      case TvRemoteTouchPhase.started:
+        _lastRemoteX = event.x;
+        break;
+      case TvRemoteTouchPhase.move:
+        final double last = _lastRemoteX ?? event.x;
+        final double dx = event.x - last;
+        _lastRemoteX = event.x;
+        if (_gameState == GameState.playing) {
+          // Horizontal swipe drives the paddle. Scale so the crown mapping
+          // (delta * 0.3) covers roughly the full width on a broad swipe.
+          _onCrownRotated(dx * _screenWidth * 3.0);
+          _repaintNotifier.repaint();
+        }
+        break;
+      case TvRemoteTouchPhase.ended:
+      case TvRemoteTouchPhase.cancelled:
+        _lastRemoteX = null;
+        break;
+      case TvRemoteTouchPhase.clickStart:
+        // Pressing the touchpad launches a docked ball / fires lasers.
+        if (_gameState == GameState.playing) {
+          _onScreenTapped();
+        }
+        break;
+      case TvRemoteTouchPhase.loc:
+      case TvRemoteTouchPhase.clickEnd:
+        break;
+    }
   }
 
   // Map Digital Crown rotation onto paddle movement.
@@ -181,6 +238,8 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
 
   // Trigger tactile haptic feedback (Watch Taptic Engine or iOS HapticFeedback).
   void _sendHaptic(String type) {
+    // Apple TV / Siri Remote has no haptics.
+    if (FlutterTvosPlatform.isTvos) return;
     if (FlutterWatchosPlatform.isWatch) {
       switch (type) {
         case 'start':
