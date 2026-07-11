@@ -667,6 +667,15 @@ class _GameScreenState extends State<GameScreen>
 
   void _stopGameLoop() {
     _ticker.stop();
+    // Leaving gameplay: hand focus back so the destination screen's autofocus
+    // (level tiles, overlay buttons) can claim it. While playing we park focus
+    // on the root node (see [_focusGameplay]); if we never release it, the
+    // focus scope still has a focused child and every `autofocus` request on
+    // the next screen is ignored — so on tvOS nothing highlights and the Siri
+    // Remote D-pad has nowhere to move.
+    if (_isTv) {
+      _gameFocusNode.unfocus();
+    }
   }
 
   void _onTick(Duration elapsed) {
