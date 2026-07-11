@@ -647,6 +647,19 @@ class _GameScreenState extends State<GameScreen>
     }
   }
 
+  /// Auto-pause when the app resigns active during play. The observer is only
+  /// registered on tvOS, so this fires when the Siri Remote Home button, a
+  /// system dialog, or a screensaver steals focus — otherwise the ball keeps
+  /// bouncing off-screen and the player returns to a silent game over. We stay
+  /// paused on resume so play restarts on the player's terms.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed &&
+        _gameState == GameState.playing) {
+      _pauseGame();
+    }
+  }
+
   void _startGameLoop() {
     _ticker.start();
     _lastElapsed = Duration.zero;
