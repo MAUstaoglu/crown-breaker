@@ -112,6 +112,12 @@ class _GameScreenState extends State<GameScreen>
   /// Play/Pause remote buttons reach [_onRootKey] instead of being dropped.
   final FocusNode _gameFocusNode = FocusNode(debugLabel: 'CrownBreakerGame');
 
+  /// tvOS holistic focus guard: the last "real" (leaf) control that held focus,
+  /// plus a debounce timer used to restore focus if it is ever lost. Together
+  /// they guarantee the Siri Remote always has something to act on.
+  FocusNode? _lastLeafFocus;
+  Timer? _focusRestoreTimer;
+
   final List<LevelData> _levels = kLevels;
 
   @override
@@ -135,6 +141,9 @@ class _GameScreenState extends State<GameScreen>
       TvRemoteController.instance.init();
       _remoteListener = _onRemoteTouch;
       TvRemoteController.instance.addRawListener(_remoteListener!);
+      // Holistic focus guard: never let the Siri Remote end up with nothing
+      // focused (which would make the app uncontrollable).
+      FocusManager.instance.addListener(_onFocusChanged);
     } else if (FlutterWatchosPlatform.isIos) {
       // Default to horizontal mode on iOS (iPhone/iPad).
       _verticalMode = false;
@@ -165,7 +174,9 @@ class _GameScreenState extends State<GameScreen>
     }
     if (_isTv) {
       WidgetsBinding.instance.removeObserver(this);
+      FocusManager.instance.removeListener(_onFocusChanged);
     }
+    _focusRestoreTimer?.cancel();
     _gameFocusNode.dispose();
     _ticker.dispose();
     _levelSelectScrollController.dispose();
@@ -545,6 +556,59 @@ class _GameScreenState extends State<GameScreen>
   void _focusGameplay() {
     if (_isTv) {
       _gameFocusNode.requestFocus();
+    }
+  }
+
+  /// tvOS holistic focus guard. Fires on every focus change. As long as a real
+  /// control holds focus we just remember it; the moment focus falls to nothing
+  /// (null) or to a bare scope — which leaves the Siri Remote with nothing to
+  /// steer and makes the app feel frozen — we schedule a restore. The restore
+  /// is debounced so a screen's own `autofocus` gets first claim on the frame;
+  /// we only step in if focus is *still* orphaned afterwards.
+  void _onFocusChanged() {
+    if (!_isTv) return;
+    final primary = FocusManager.instance.primaryFocus;
+    final bool hasRealFocus = primary != null && primary is! FocusScopeNode;
+    if (hasRealFocus) {
+      if (primary != _gameFocusNode) _lastLeafFocus = primary;
+      return;
+    }
+    _focusRestoreTimer?.cancel();
+    _focusRestoreTimer =
+        Timer(const Duration(milliseconds: 60), _restoreFocusIfLost);
+  }
+
+  void _restoreFocusIfLost() {
+    if (!_isTv || !mounted) return;
+    final primary = FocusManager.instance.primaryFocus;
+    // Something (usually autofocus) reclaimed focus — nothing to do.
+    if (primary != null && primary is! FocusScopeNode) return;
+
+    // While playing, focus belongs on the root node so the D-pad drives the
+    // paddle rather than the (hidden) HUD controls.
+    if (_gameState == GameState.playing) {
+      _gameFocusNode.requestFocus();
+      return;
+    }
+
+    // Prefer the control that last held focus, if it is still on screen.
+    final last = _lastLeafFocus;
+    if (last != null &&
+        last != _gameFocusNode &&
+        last.context != null &&
+        last.canRequestFocus &&
+        !last.skipTraversal) {
+      last.requestFocus();
+      return;
+    }
+
+    // Fall back to the first focusable control on the current screen. This also
+    // rescues the level grid when its autofocus target is scrolled out of view.
+    for (final node in _gameFocusNode.traversalDescendants) {
+      if (node.canRequestFocus && !node.skipTraversal) {
+        node.requestFocus();
+        return;
+      }
     }
   }
 
