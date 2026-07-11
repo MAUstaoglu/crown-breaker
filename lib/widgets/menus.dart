@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../constants.dart';
 import '../models.dart';
+import 'neon_button.dart';
 
 /// The title screen: logo, high score, and the Play / orientation buttons.
 class MenuView extends StatelessWidget {
   final int highScore;
   final bool verticalMode;
+  final bool showModeToggle;
   final VoidCallback onPlay;
   final VoidCallback onToggleMode;
 
@@ -14,6 +16,7 @@ class MenuView extends StatelessWidget {
     super.key,
     required this.highScore,
     required this.verticalMode,
+    this.showModeToggle = true,
     required this.onPlay,
     required this.onToggleMode,
   });
@@ -52,36 +55,23 @@ class MenuView extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ElevatedButton(
+            NeonButton(
+              label: "PLAY",
               onPressed: onPlay,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF101035),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: const BorderSide(color: Colors.cyanAccent, width: 1.5),
-                ),
-              ),
-              child: const Text(
-                "PLAY",
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
-              ),
+              accent: Colors.cyanAccent,
+              autofocus: true,
             ),
-            const SizedBox(width: 6),
-            OutlinedButton(
-              onPressed: onToggleMode,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.pinkAccent,
-                side: const BorderSide(color: Colors.pinkAccent, width: 1.2),
+            if (showModeToggle) ...[
+              const SizedBox(width: 6),
+              NeonButton(
+                label: verticalMode ? "VERT" : "HORIZ",
+                onPressed: onToggleMode,
+                accent: Colors.pinkAccent,
+                background: const Color(0xFF1A0A14),
+                fontSize: 9,
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
-              child: Text(
-                verticalMode ? "VERT" : "HORIZ",
-                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
-              ),
-            ),
+            ],
           ],
         ),
       ],
@@ -90,7 +80,7 @@ class MenuView extends StatelessWidget {
 }
 
 /// The level-select grid. Locked levels are greyed out; cleared levels show
-/// their earned star rating.
+/// their earned star rating. Tiles glow when focused (tvOS remote).
 class LevelSelectView extends StatelessWidget {
   final List<LevelData> levels;
   final int maxUnlockedLevel;
@@ -111,6 +101,8 @@ class LevelSelectView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final int autofocusIndex =
+        kUnlockAllLevels ? 0 : maxUnlockedLevel.clamp(0, levels.length - 1);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
       child: Column(
@@ -138,57 +130,14 @@ class LevelSelectView extends StatelessWidget {
               itemBuilder: (context, index) {
                 final lvl = levels[index];
                 final isLocked = !kUnlockAllLevels && index > maxUnlockedLevel;
-                final stars = levelStars[index] ?? 0;
-                return InkWell(
-                  onTap: isLocked ? null : () => onSelect(index),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isLocked ? const Color(0xFF080810) : const Color(0xFF0F0F28),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isLocked ? Colors.grey.shade800 : lvl.themeColor,
-                        width: 1.2,
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (isLocked)
-                          Icon(Icons.lock, size: 12, color: Colors.grey.shade700)
-                        else
-                          Text(
-                            "${index + 1}",
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              color: lvl.themeColor,
-                            ),
-                          ),
-                        if (!isLocked && levelStars.containsKey(index))
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: List.generate(
-                              3,
-                              (s) => Icon(
-                                s < stars ? Icons.star : Icons.star_border,
-                                size: 7,
-                                color: s < stars ? Colors.yellowAccent : Colors.grey.shade800,
-                              ),
-                            ),
-                          )
-                        else
-                          Text(
-                            isLocked ? "LOCKED" : lvl.name.split(" ").first,
-                            style: TextStyle(
-                              fontSize: 6,
-                              color: isLocked ? Colors.grey.shade700 : Colors.white70,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
-                  ),
+                return _LevelTile(
+                  index: index,
+                  level: lvl,
+                  isLocked: isLocked,
+                  stars: levelStars[index] ?? 0,
+                  hasStars: levelStars.containsKey(index),
+                  autofocus: index == autofocusIndex,
+                  onSelect: isLocked ? null : () => onSelect(index),
                 );
               },
             ),
@@ -198,6 +147,103 @@ class LevelSelectView extends StatelessWidget {
             onPressed: onBack,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One level cell. Border and fill brighten while focused so the Siri Remote
+/// cursor position is obvious; locked tiles are skipped by focus traversal.
+class _LevelTile extends StatefulWidget {
+  final int index;
+  final LevelData level;
+  final bool isLocked;
+  final int stars;
+  final bool hasStars;
+  final bool autofocus;
+  final VoidCallback? onSelect;
+
+  const _LevelTile({
+    required this.index,
+    required this.level,
+    required this.isLocked,
+    required this.stars,
+    required this.hasStars,
+    required this.autofocus,
+    required this.onSelect,
+  });
+
+  @override
+  State<_LevelTile> createState() => _LevelTileState();
+}
+
+class _LevelTileState extends State<_LevelTile> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final lvl = widget.level;
+    final isLocked = widget.isLocked;
+    return InkWell(
+      onTap: widget.onSelect,
+      autofocus: widget.autofocus && !isLocked,
+      canRequestFocus: !isLocked,
+      onFocusChange: (f) => setState(() => _focused = f),
+      focusColor: Colors.transparent, // The border/glow below is the cue.
+      child: Container(
+        decoration: BoxDecoration(
+          color: isLocked
+              ? const Color(0xFF080810)
+              : _focused
+                  ? Color.lerp(const Color(0xFF0F0F28), lvl.themeColor, 0.22)
+                  : const Color(0xFF0F0F28),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isLocked ? Colors.grey.shade800 : lvl.themeColor,
+            width: _focused ? 2.4 : 1.2,
+          ),
+          boxShadow: _focused
+              ? [BoxShadow(color: lvl.themeColor.withValues(alpha: 0.55), blurRadius: 8)]
+              : null,
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isLocked)
+              Icon(Icons.lock, size: 12, color: Colors.grey.shade700)
+            else
+              Text(
+                "${widget.index + 1}",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: lvl.themeColor,
+                ),
+              ),
+            if (!isLocked && widget.hasStars)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(
+                  3,
+                  (s) => Icon(
+                    s < widget.stars ? Icons.star : Icons.star_border,
+                    size: 7,
+                    color: s < widget.stars ? Colors.yellowAccent : Colors.grey.shade800,
+                  ),
+                ),
+              )
+            else
+              Text(
+                isLocked ? "LOCKED" : lvl.name.split(" ").first,
+                style: TextStyle(
+                  fontSize: 6,
+                  color: isLocked ? Colors.grey.shade700 : Colors.white70,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
       ),
     );
   }

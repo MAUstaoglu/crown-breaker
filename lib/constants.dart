@@ -17,6 +17,13 @@ const double kBrickTopMargin = 38.0;
 /// Minimum distance the paddle keeps from the playfield edges.
 const double kPaddleClamp = 22.0;
 
+/// tvOS: the game simulates in a fixed logical viewport of this height and is
+/// scaled up to the TV panel (1080 logical px on Apple TV). Without this the
+/// watch-tuned dimensions (45px paddle, 3.5px ball, 7px fonts) render
+/// microscopic on a big screen. 220 keeps watch-like proportions: the paddle
+/// spans ~11% of a 16:9 playfield, the ball scales to ~17px on screen.
+const double kTvLogicalHeight = 220.0;
+
 enum GameState {
   menu,
   levelSelect,

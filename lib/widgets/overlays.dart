@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import 'neon_button.dart';
 
 /// Brief "LEVEL N — name" splash shown before play begins.
 class LevelIntroView extends StatelessWidget {
@@ -54,6 +55,11 @@ class PlayingHud extends StatelessWidget {
   final int comboCount;
   final bool showLaunchHint;
   final bool showLaserHint;
+
+  /// On Apple TV the pause circle is hidden (there is no pointer to tap it);
+  /// the Siri Remote Menu / Play-Pause buttons pause instead, and the hints
+  /// speak remote language ("PRESS" rather than "TAP").
+  final bool isTv;
   final VoidCallback onPause;
 
   const PlayingHud({
@@ -65,6 +71,7 @@ class PlayingHud extends StatelessWidget {
     required this.comboCount,
     required this.showLaunchHint,
     required this.showLaserHint,
+    this.isTv = false,
     required this.onPause,
   });
 
@@ -109,29 +116,30 @@ class PlayingHud extends StatelessWidget {
             ],
           ),
         ),
-        Positioned(
-          top: 9,
-          right: 16,
-          child: GestureDetector(
-            onTap: onPause,
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 0.5),
-              ),
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.pause,
-                size: 9,
-                color: Colors.white,
+        if (!isTv)
+          Positioned(
+            top: 9,
+            right: 16,
+            child: GestureDetector(
+              onTap: onPause,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 0.5),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.pause,
+                  size: 9,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
-        ),
         if (comboCount > 1)
           Positioned(
             top: 25,
@@ -150,8 +158,10 @@ class PlayingHud extends StatelessWidget {
               ),
             ),
           ),
-        if (showLaunchHint) _hint("TAP TO LAUNCH", Colors.pinkAccent),
-        if (showLaserHint) _hint("TAP TO SHOOT LASERS", Colors.redAccent),
+        if (showLaunchHint)
+          _hint(isTv ? "PRESS TO LAUNCH" : "TAP TO LAUNCH", Colors.pinkAccent),
+        if (showLaserHint)
+          _hint(isTv ? "PRESS TO SHOOT LASERS" : "TAP TO SHOOT LASERS", Colors.redAccent),
       ],
     );
   }
@@ -210,36 +220,20 @@ class PausedView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
+            NeonButton(
+              label: "RESUME",
               onPressed: onResume,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF101035),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: const BorderSide(color: Colors.cyanAccent, width: 1.2),
-                ),
-              ),
-              child: const Text(
-                "RESUME",
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
-              ),
+              accent: Colors.cyanAccent,
+              autofocus: true,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             ),
             const SizedBox(height: 8),
-            ElevatedButton(
+            NeonButton(
+              label: "QUIT",
               onPressed: onQuit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF280F0F),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: const BorderSide(color: Colors.redAccent, width: 1.0),
-                ),
-              ),
-              child: const Text(
-                "QUIT",
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
-              ),
+              accent: Colors.redAccent,
+              background: const Color(0xFF280F0F),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             ),
           ],
         ),
@@ -282,27 +276,25 @@ class GameOverView extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ElevatedButton(
+            NeonButton(
+              label: "TRY AGAIN",
               onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF280F0F),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  side: const BorderSide(color: Colors.redAccent),
-                ),
-              ),
-              child: const Text("TRY AGAIN", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+              accent: Colors.redAccent,
+              background: const Color(0xFF280F0F),
+              autofocus: true,
+              fontSize: 9,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              radius: 15,
             ),
             const SizedBox(width: 8),
-            ElevatedButton(
+            NeonButton(
+              label: "MENU",
               onPressed: onMenu,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1F1F1F),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              ),
-              child: const Text("MENU", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+              accent: Colors.white54,
+              background: const Color(0xFF1F1F1F),
+              fontSize: 9,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              radius: 15,
             ),
           ],
         ),
@@ -363,27 +355,26 @@ class GameWonView extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (hasNextLevel)
-              ElevatedButton(
+              NeonButton(
+                label: "NEXT LEVEL",
                 onPressed: onNext,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F280F),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    side: const BorderSide(color: Colors.yellowAccent),
-                  ),
-                ),
-                child: const Text("NEXT LEVEL", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                accent: Colors.yellowAccent,
+                background: const Color(0xFF0F280F),
+                autofocus: true,
+                fontSize: 9,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                radius: 15,
               ),
             const SizedBox(width: 8),
-            ElevatedButton(
+            NeonButton(
+              label: "LEVELS",
               onPressed: onMenu,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1F1F1F),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              ),
-              child: const Text("LEVELS", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+              accent: Colors.white54,
+              background: const Color(0xFF1F1F1F),
+              autofocus: !hasNextLevel,
+              fontSize: 9,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              radius: 15,
             ),
           ],
         ),

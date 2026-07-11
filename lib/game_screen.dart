@@ -26,7 +26,8 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateMixin {
+class _GameScreenState extends State<GameScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   GameState _gameState = GameState.menu;
   int _currentLevelIndex = 0;
   int _score = 0;
@@ -103,6 +104,14 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   TvRemoteTouchListener? _remoteListener;
   double? _lastRemoteX;
 
+  /// True on Apple TV. Checked once; drives viewport scaling, remote-first
+  /// menus (focus/select instead of taps), and Menu-button pause.
+  bool _isTv = false;
+
+  /// Root focus node: holds focus while playing so the Menu (escape) and
+  /// Play/Pause remote buttons reach [_onRootKey] instead of being dropped.
+  final FocusNode _gameFocusNode = FocusNode(debugLabel: 'CrownBreakerGame');
+
   final List<LevelData> _levels = kLevels;
 
   @override
@@ -112,7 +121,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
 
     // tvOS check must come first: Platform.isIOS is true on tvOS (iOS-family),
     // so FlutterWatchosPlatform.isIos would otherwise capture the Apple TV.
-    if (FlutterTvosPlatform.isTvos) {
+    _isTv = FlutterTvosPlatform.isTvos;
+    if (_isTv) {
+      // Siri Remote Menu arrives as a navigation popRoute (Android-back
+      // parity), not a key event — observe it for pause / back handling.
+      WidgetsBinding.instance.addObserver(this);
       // Apple TV is a landscape display — use horizontal mode like iPhone.
       _verticalMode = false;
       // Drive the paddle with the Siri Remote touch surface (the RCU analog of
@@ -150,6 +163,10 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     if (_remoteListener != null) {
       TvRemoteController.instance.removeRawListener(_remoteListener!);
     }
+    if (_isTv) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
+    _gameFocusNode.dispose();
     _ticker.dispose();
     _levelSelectScrollController.dispose();
     _repaintNotifier.dispose();
@@ -490,8 +507,86 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
           _gameState = GameState.playing;
           _startGameLoop();
         });
+        _focusGameplay();
       }
     });
+  }
+
+  /// On tvOS, park focus on the root game node while playing so no stale
+  /// button keeps focus (a Select press must launch the ball, not re-activate
+  /// an off-screen menu button) and Menu/Play-Pause presses reach [_onRootKey].
+  void _focusGameplay() {
+    if (_isTv) {
+      _gameFocusNode.requestFocus();
+    }
+  }
+
+  void _pauseGame() {
+    _sendHaptic("click");
+    setState(() {
+      _gameState = GameState.paused;
+      _stopGameLoop();
+    });
+  }
+
+  void _resumeGame() {
+    _sendHaptic("start");
+    setState(() {
+      _gameState = GameState.playing;
+      _startGameLoop();
+    });
+    _focusGameplay();
+  }
+
+  /// The Siri Remote Play/Pause button (LogicalKeyboardKey.mediaPlayPause)
+  /// toggles pause during gameplay.
+  KeyEventResult _onRootKey(FocusNode node, KeyEvent event) {
+    if (!_isTv ||
+        event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.mediaPlayPause) {
+      return KeyEventResult.ignored;
+    }
+    if (_gameState == GameState.playing) {
+      _pauseGame();
+      return KeyEventResult.handled;
+    }
+    if (_gameState == GameState.paused) {
+      _resumeGame();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Siri Remote Menu button. The flutter_tvos native plugin emits it as a
+  /// `popRoute` (Android-back parity), so it lands here — not as a key event.
+  /// Menu pauses gameplay and steps back one screen everywhere else; returning
+  /// false at the title screen lets tvOS perform its mandatory default
+  /// (suspend to the home screen).
+  @override
+  Future<bool> didPopRoute() async {
+    if (!_isTv) {
+      return false;
+    }
+    switch (_gameState) {
+      case GameState.playing:
+        _pauseGame();
+        return true;
+      case GameState.paused:
+      case GameState.gameOver:
+      case GameState.gameWon:
+        _sendHaptic("stop");
+        _stopGameLoop();
+        setState(() => _gameState = GameState.levelSelect);
+        return true;
+      case GameState.levelIntro:
+        return true; // Swallow during the splash.
+      case GameState.levelSelect:
+        _sendHaptic("click");
+        setState(() => _gameState = GameState.menu);
+        return true;
+      case GameState.menu:
+        return false;
+    }
   }
 
   void _startGameLoop() {
@@ -1160,10 +1255,19 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // Capture the real viewport size on first layout / resize.
-            if (_screenWidth != constraints.maxWidth || _screenHeight != constraints.maxHeight) {
-              _screenWidth = constraints.maxWidth;
-              _screenHeight = constraints.maxHeight;
+            // On TV the simulation runs in a fixed logical viewport
+            // (kTvLogicalHeight tall, same aspect as the panel) and the whole
+            // scene — canvas, HUD, menus — is scaled up by FittedBox below.
+            // Elsewhere the viewport is simply the physical screen.
+            final double tvScale =
+                _isTv ? constraints.maxHeight / kTvLogicalHeight : 1.0;
+            final double viewWidth = constraints.maxWidth / tvScale;
+            final double viewHeight = constraints.maxHeight / tvScale;
+
+            // Capture the (logical) viewport size on first layout / resize.
+            if (_screenWidth != viewWidth || _screenHeight != viewHeight) {
+              _screenWidth = viewWidth;
+              _screenHeight = viewHeight;
               if (_gameState == GameState.playing && ballAttachedToPaddle && _balls.isNotEmpty) {
                 if (_verticalMode) {
                   targetPaddleY = (_screenHeight - paddleWidth) / 2;
@@ -1186,12 +1290,23 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
               }
             }
 
-            return Center(
-              child: SizedBox(
-                width: _screenWidth,
-                height: _screenHeight,
-                child: Container(
-                  color: levelBackgroundColor(_currentLevelIndex + 1),
+            return Focus(
+              focusNode: _gameFocusNode,
+              onKeyEvent: _onRootKey,
+              // SizedBox.expand forces the FittedBox to the full screen —
+              // under Center's loose constraints it would shrink-wrap the
+              // logical viewport and render unscaled.
+              child: SizedBox.expand(
+                child: FittedBox(
+                  // Logical viewport and panel share an aspect ratio, so fill
+                  // == uniform scale (no distortion, no letterbox). A no-op
+                  // off-TV where the child already matches the constraints.
+                  fit: BoxFit.fill,
+                  child: SizedBox(
+                    width: _screenWidth,
+                    height: _screenHeight,
+                    child: Container(
+                      color: levelBackgroundColor(_currentLevelIndex + 1),
                   child: Stack(
                     children: [
                       // Interactive playfield canvas.
@@ -1236,6 +1351,8 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                         MenuView(
                           highScore: _highScore,
                           verticalMode: _verticalMode,
+                          // TV is always landscape; hide the orientation toggle.
+                          showModeToggle: !_isTv,
                           onPlay: () {
                             _sendHaptic("click");
                             setState(() => _gameState = GameState.levelSelect);
@@ -1271,23 +1388,12 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                           comboCount: _comboCount,
                           showLaunchHint: ballAttachedToPaddle,
                           showLaserHint: isLaserActive && !ballAttachedToPaddle,
-                          onPause: () {
-                            _sendHaptic("click");
-                            setState(() {
-                              _gameState = GameState.paused;
-                              _stopGameLoop();
-                            });
-                          },
+                          isTv: _isTv,
+                          onPause: _pauseGame,
                         ),
                       if (_gameState == GameState.paused)
                         PausedView(
-                          onResume: () {
-                            _sendHaptic("start");
-                            setState(() {
-                              _gameState = GameState.playing;
-                              _startGameLoop();
-                            });
-                          },
+                          onResume: _resumeGame,
                           onQuit: () {
                             _sendHaptic("stop");
                             setState(() => _gameState = GameState.levelSelect);
@@ -1313,7 +1419,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                             setState(() => _gameState = GameState.levelSelect);
                           },
                         ),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
