@@ -1397,6 +1397,14 @@ class _GameScreenState extends State<GameScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
+        // Apple TV reports a large overscan safe area; honoring it letterboxes
+        // the scene inside the dark scaffold background so the app looks
+        // windowed. The HUD already lives inside the title-safe region of the
+        // logical viewport, so render full-bleed on tvOS for true fullscreen.
+        left: !_isTv,
+        top: !_isTv,
+        right: !_isTv,
+        bottom: !_isTv,
         child: LayoutBuilder(
           builder: (context, constraints) {
             // On TV the simulation runs in a fixed logical viewport
