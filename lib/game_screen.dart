@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_tvos/flutter_tvos.dart';
 import 'package:flutter_watchos/flutter_watchos.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'constants.dart';
 import 'levels.dart';
@@ -338,27 +339,57 @@ class _GameScreenState extends State<GameScreen>
     }
   }
 
+  /// NSUserDefaults / on-disk key holding the whole save blob as JSON.
+  static const String _saveKey = 'crown_breaker_save';
+
   String get _savePath {
     final appDir = Directory.systemTemp.parent.path;
     return '$appDir/Documents/crown_breaker_save.json';
   }
 
+  // Note: these read the static platform check directly rather than [_isTv],
+  // because _loadSaveData runs before initState assigns that field.
+
+  /// Reads the raw save JSON, or null if there is none. Apple TV has no
+  /// persistent Documents directory (it can be purged at any time), so it uses
+  /// NSUserDefaults via shared_preferences (+ shared_preferences_tvos); watch
+  /// and iOS keep the on-disk file, which persists there.
+  Future<String?> _readSaveString() async {
+    if (FlutterTvosPlatform.isTvos) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_saveKey);
+    }
+    final file = File(_savePath);
+    return await file.exists() ? file.readAsString() : null;
+  }
+
+  Future<void> _writeSaveString(String contents) async {
+    if (FlutterTvosPlatform.isTvos) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_saveKey, contents);
+      return;
+    }
+    final dir = Directory('${Directory.systemTemp.parent.path}/Documents');
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    await File('${dir.path}/crown_breaker_save.json').writeAsString(contents);
+  }
+
   Future<void> _loadSaveData() async {
     try {
-      final file = File(_savePath);
-      if (await file.exists()) {
-        final contents = await file.readAsString();
-        final data = jsonDecode(contents) as Map<String, dynamic>;
-        setState(() {
-          _highScore = data['highScore'] as int? ?? 0;
-          _maxUnlockedLevel = (data['maxUnlockedLevel'] as int? ?? 0)
-              .clamp(0, _levels.length - 1);
-          final starsData = data['levelStars'] as Map<String, dynamic>?;
-          if (starsData != null) {
-            _levelStars = starsData.map((k, v) => MapEntry(int.parse(k), v as int));
-          }
-        });
-      }
+      final contents = await _readSaveString();
+      if (contents == null || !mounted) return;
+      final data = jsonDecode(contents) as Map<String, dynamic>;
+      setState(() {
+        _highScore = data['highScore'] as int? ?? 0;
+        _maxUnlockedLevel = (data['maxUnlockedLevel'] as int? ?? 0)
+            .clamp(0, _levels.length - 1);
+        final starsData = data['levelStars'] as Map<String, dynamic>?;
+        if (starsData != null) {
+          _levelStars = starsData.map((k, v) => MapEntry(int.parse(k), v as int));
+        }
+      });
     } catch (_) {
       // First run or corrupted save — use defaults.
     }
@@ -371,12 +402,7 @@ class _GameScreenState extends State<GameScreen>
       });
     }
     try {
-      final dir = Directory('${Directory.systemTemp.parent.path}/Documents');
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
-      }
-      final file = File('${dir.path}/crown_breaker_save.json');
-      await file.writeAsString(jsonEncode({
+      await _writeSaveString(jsonEncode({
         'highScore': _highScore,
         'maxUnlockedLevel': _maxUnlockedLevel,
         'levelStars': _levelStars.map((k, v) => MapEntry(k.toString(), v)),
