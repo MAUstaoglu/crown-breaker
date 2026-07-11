@@ -112,7 +112,13 @@ class _GameScreenState extends State<GameScreen>
   /// Root focus node: anchors focus while playing so the focus invariant holds
   /// and no stale menu button keeps focus. Gameplay keys are handled globally
   /// via [_onHardwareKey], so control does not depend on this node's focus.
-  final FocusNode _gameFocusNode = FocusNode(debugLabel: 'CrownBreakerGame');
+  ///
+  /// skipTraversal is essential: this node's rect is the whole screen, so if
+  /// it were a traversal candidate every arrow press on a menu could "move"
+  /// focus onto this invisible node (nothing highlighted = focus looks lost).
+  /// It must only gain focus when [_focusGameplay] requests it explicitly.
+  final FocusNode _gameFocusNode =
+      FocusNode(debugLabel: 'CrownBreakerGame', skipTraversal: true);
 
   /// tvOS holistic focus guard: the last "real" (leaf) control that held focus,
   /// plus a debounce timer used to restore focus if it is ever lost. Together
@@ -606,7 +612,12 @@ class _GameScreenState extends State<GameScreen>
   void _onFocusChanged() {
     if (!_isTv) return;
     final primary = FocusManager.instance.primaryFocus;
-    final bool hasRealFocus = primary != null && primary is! FocusScopeNode;
+    // "Real" focus is a leaf control the user can see. The root game node only
+    // counts during gameplay — on a menu it is invisible, so focus resting on
+    // it reads as lost and must be recovered like a null focus.
+    final bool hasRealFocus = primary != null &&
+        primary is! FocusScopeNode &&
+        (primary != _gameFocusNode || _isGameplayFocusState);
     if (hasRealFocus) {
       if (primary != _gameFocusNode) _lastLeafFocus = primary;
       return;
@@ -635,8 +646,13 @@ class _GameScreenState extends State<GameScreen>
   void _restoreFocusIfLost() {
     if (!_isTv || !mounted) return;
     final primary = FocusManager.instance.primaryFocus;
-    // Something (usually autofocus) reclaimed focus — nothing to do.
-    if (primary != null && primary is! FocusScopeNode) return;
+    // Something (usually autofocus) reclaimed focus — nothing to do. Focus on
+    // the root node counts only during gameplay (invisible on menus).
+    if (primary != null &&
+        primary is! FocusScopeNode &&
+        (primary != _gameFocusNode || _isGameplayFocusState)) {
+      return;
+    }
     _restoreFocus();
   }
 
