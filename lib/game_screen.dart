@@ -210,6 +210,33 @@ class _GameScreenState extends State<GameScreen>
     }
   }
 
+  // Nudge the paddle by [delta] logical pixels along its axis of travel and
+  // keep any docked ball glued to it. Drives the Siri Remote D-pad keys so the
+  // paddle can be steered by discrete presses, not just touch-surface swipes.
+  void _nudgePaddle(double delta) {
+    if (_gameState != GameState.playing) return;
+    if (_verticalMode) {
+      targetPaddleY = (targetPaddleY + delta)
+          .clamp(kPaddleClamp, _screenHeight - paddleWidth - kPaddleClamp);
+      paddleY = targetPaddleY;
+      for (final ball in _balls) {
+        if (ball.attached) {
+          ball.y = paddleY + paddleWidth / 2 + ball.attachedOffset;
+        }
+      }
+    } else {
+      targetPaddleX = (targetPaddleX + delta)
+          .clamp(kPaddleClamp, _screenWidth - paddleWidth - kPaddleClamp);
+      paddleX = targetPaddleX;
+      for (final ball in _balls) {
+        if (ball.attached) {
+          ball.x = paddleX + paddleWidth / 2 + ball.attachedOffset;
+        }
+      }
+    }
+    _repaintNotifier.repaint();
+  }
+
   // Map Digital Crown rotation onto paddle movement.
   void _onCrownRotated(double delta) {
     if (_verticalMode) {
@@ -538,21 +565,52 @@ class _GameScreenState extends State<GameScreen>
     _focusGameplay();
   }
 
-  /// The Siri Remote Play/Pause button (LogicalKeyboardKey.mediaPlayPause)
-  /// toggles pause during gameplay.
+  /// Siri Remote key handling. The Play/Pause button
+  /// (LogicalKeyboardKey.mediaPlayPause) toggles pause; the D-pad arrow keys
+  /// steer the paddle during play as an alternative to the touch surface.
   KeyEventResult _onRootKey(FocusNode node, KeyEvent event) {
-    if (!_isTv ||
-        event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.mediaPlayPause) {
+    if (!_isTv) return KeyEventResult.ignored;
+
+    // Play/Pause toggles pause during gameplay.
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
+      if (_gameState == GameState.playing) {
+        _pauseGame();
+        return KeyEventResult.handled;
+      }
+      if (_gameState == GameState.paused) {
+        _resumeGame();
+        return KeyEventResult.handled;
+      }
       return KeyEventResult.ignored;
     }
-    if (_gameState == GameState.playing) {
-      _pauseGame();
-      return KeyEventResult.handled;
-    }
-    if (_gameState == GameState.paused) {
-      _resumeGame();
-      return KeyEventResult.handled;
+
+    // D-pad drives the paddle — but only while playing, so menu/pause focus
+    // navigation (which relies on these same arrow keys) is left untouched.
+    // Handle repeats too, so holding the ring keeps the paddle moving.
+    if (_gameState == GameState.playing &&
+        (event is KeyDownEvent || event is KeyRepeatEvent)) {
+      final double step = _screenWidth * 0.045;
+      final key = event.logicalKey;
+      if (_verticalMode) {
+        if (key == LogicalKeyboardKey.arrowUp) {
+          _nudgePaddle(-step);
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowDown) {
+          _nudgePaddle(step);
+          return KeyEventResult.handled;
+        }
+      } else {
+        if (key == LogicalKeyboardKey.arrowLeft) {
+          _nudgePaddle(-step);
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowRight) {
+          _nudgePaddle(step);
+          return KeyEventResult.handled;
+        }
+      }
     }
     return KeyEventResult.ignored;
   }
