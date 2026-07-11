@@ -1448,6 +1448,8 @@ class _GameScreenState extends State<GameScreen>
                           maxUnlockedLevel: _maxUnlockedLevel,
                           levelStars: _levelStars,
                           controller: _levelSelectScrollController,
+                          // tvOS has no pointer; the Menu button handles back.
+                          showBackButton: !_isTv,
                           onSelect: (index) => _enterLevel(index),
                           onBack: () {
                             _sendHaptic("click");

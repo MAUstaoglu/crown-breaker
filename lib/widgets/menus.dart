@@ -89,6 +89,10 @@ class LevelSelectView extends StatelessWidget {
   final VoidCallback onBack;
   final ScrollController? controller;
 
+  /// Whether to show the on-screen back button. Hidden on tvOS, where there is
+  /// no pointer to tap it and the Siri Remote Menu button steps back instead.
+  final bool showBackButton;
+
   const LevelSelectView({
     super.key,
     required this.levels,
@@ -97,6 +101,7 @@ class LevelSelectView extends StatelessWidget {
     required this.onSelect,
     required this.onBack,
     this.controller,
+    this.showBackButton = true,
   });
 
   @override
@@ -142,10 +147,11 @@ class LevelSelectView extends StatelessWidget {
               },
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios, size: 14, color: Colors.grey),
-            onPressed: onBack,
-          ),
+          if (showBackButton)
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios, size: 14, color: Colors.grey),
+              onPressed: onBack,
+            ),
         ],
       ),
     );
