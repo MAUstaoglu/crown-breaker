@@ -211,9 +211,11 @@ class _GameScreenState extends State<GameScreen>
         final double dx = event.x - last;
         _lastRemoteX = event.x;
         if (_gameState == GameState.playing) {
-          // Horizontal swipe drives the paddle. Scale so the crown mapping
-          // (delta * 0.3) covers roughly the full width on a broad swipe.
-          _onCrownRotated(dx * _screenWidth * 3.0);
+          // Horizontal swipe drives the paddle. Through the crown mapping
+          // (delta * 0.3) this makes one full edge-to-edge swipe (dx = 2.0)
+          // travel ~90% of the playfield — fast enough to save a corner ball,
+          // slow enough to aim (3.0 overshot at nearly 2x the screen width).
+          _onCrownRotated(dx * _screenWidth * 1.5);
           _repaintNotifier.repaint();
         }
         break;
