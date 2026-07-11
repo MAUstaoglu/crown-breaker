@@ -109,8 +109,9 @@ class _GameScreenState extends State<GameScreen>
   /// menus (focus/select instead of taps), and Menu-button pause.
   bool _isTv = false;
 
-  /// Root focus node: holds focus while playing so the Menu (escape) and
-  /// Play/Pause remote buttons reach [_onRootKey] instead of being dropped.
+  /// Root focus node: anchors focus while playing so the focus invariant holds
+  /// and no stale menu button keeps focus. Gameplay keys are handled globally
+  /// via [_onHardwareKey], so control does not depend on this node's focus.
   final FocusNode _gameFocusNode = FocusNode(debugLabel: 'CrownBreakerGame');
 
   /// tvOS holistic focus guard: the last "real" (leaf) control that held focus,
@@ -145,6 +146,9 @@ class _GameScreenState extends State<GameScreen>
       // Holistic focus guard: never let the Siri Remote end up with nothing
       // focused (which would make the app uncontrollable).
       FocusManager.instance.addListener(_onFocusChanged);
+      // Gameplay keys go through HardwareKeyboard so they work even if focus is
+      // momentarily lost (see [_onHardwareKey]).
+      HardwareKeyboard.instance.addHandler(_onHardwareKey);
     } else if (FlutterWatchosPlatform.isIos) {
       // Default to horizontal mode on iOS (iPhone/iPad).
       _verticalMode = false;
@@ -176,6 +180,7 @@ class _GameScreenState extends State<GameScreen>
     if (_isTv) {
       WidgetsBinding.instance.removeObserver(this);
       FocusManager.instance.removeListener(_onFocusChanged);
+      HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     }
     _focusRestoreTimer?.cancel();
     _gameFocusNode.dispose();
@@ -576,9 +581,9 @@ class _GameScreenState extends State<GameScreen>
     });
   }
 
-  /// On tvOS, park focus on the root game node while playing so no stale
-  /// button keeps focus (a Select press must launch the ball, not re-activate
-  /// an off-screen menu button) and Menu/Play-Pause presses reach [_onRootKey].
+  /// On tvOS, park focus on the root game node while playing so no stale button
+  /// keeps focus (a Select press must launch the ball, not re-activate an
+  /// off-screen menu button) and the focus invariant is upheld.
   void _focusGameplay() {
     if (_isTv) {
       _gameFocusNode.requestFocus();
@@ -662,8 +667,8 @@ class _GameScreenState extends State<GameScreen>
       }
     }
 
-    // Absolute last resort: keep focus on the root so input still reaches
-    // [_onRootKey] and the screen stays live.
+    // Absolute last resort: keep focus on the root so the screen stays live
+    // and the focus invariant (exactly one focused node) holds.
     _gameFocusNode.requestFocus();
   }
 
@@ -684,29 +689,35 @@ class _GameScreenState extends State<GameScreen>
     _focusGameplay();
   }
 
-  /// Siri Remote key handling. The Play/Pause button
-  /// (LogicalKeyboardKey.mediaPlayPause) toggles pause; the D-pad arrow keys
-  /// steer the paddle during play as an alternative to the touch surface.
-  KeyEventResult _onRootKey(FocusNode node, KeyEvent event) {
-    if (!_isTv) return KeyEventResult.ignored;
+  /// Siri Remote key handling, wired through [HardwareKeyboard] rather than the
+  /// focus tree. This is the crucial bit: the tvOS focus engine can briefly
+  /// steal focus from Flutter mid-game, and a focus-routed handler would drop
+  /// the D-pad press in that window. A HardwareKeyboard handler receives every
+  /// key regardless of what holds focus, so gameplay control can never go dead.
+  /// Returns true to mark the event consumed.
+  ///
+  /// Menu-state navigation deliberately falls through (returns false) so the
+  /// framework's own directional focus traversal still drives the menus.
+  bool _onHardwareKey(KeyEvent event) {
+    if (!_isTv) return false;
 
-    // Play/Pause toggles pause during gameplay.
+    // Play/Pause toggles pause during play and resumes from the pause screen.
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
       if (_gameState == GameState.playing) {
         _pauseGame();
-        return KeyEventResult.handled;
+        return true;
       }
       if (_gameState == GameState.paused) {
         _resumeGame();
-        return KeyEventResult.handled;
+        return true;
       }
-      return KeyEventResult.ignored;
+      return false;
     }
 
-    // D-pad drives the paddle — but only while playing, so menu/pause focus
-    // navigation (which relies on these same arrow keys) is left untouched.
-    // Handle repeats too, so holding the ring keeps the paddle moving.
+    // D-pad drives the paddle — only while playing, so menu/pause navigation
+    // (which uses these same arrow keys) is left to the focus system. Handle
+    // repeats too, so holding the ring keeps the paddle moving.
     if (_gameState == GameState.playing &&
         (event is KeyDownEvent || event is KeyRepeatEvent)) {
       final double step = _screenWidth * 0.045;
@@ -714,24 +725,24 @@ class _GameScreenState extends State<GameScreen>
       if (_verticalMode) {
         if (key == LogicalKeyboardKey.arrowUp) {
           _nudgePaddle(-step);
-          return KeyEventResult.handled;
+          return true;
         }
         if (key == LogicalKeyboardKey.arrowDown) {
           _nudgePaddle(step);
-          return KeyEventResult.handled;
+          return true;
         }
       } else {
         if (key == LogicalKeyboardKey.arrowLeft) {
           _nudgePaddle(-step);
-          return KeyEventResult.handled;
+          return true;
         }
         if (key == LogicalKeyboardKey.arrowRight) {
           _nudgePaddle(step);
-          return KeyEventResult.handled;
+          return true;
         }
       }
     }
-    return KeyEventResult.ignored;
+    return false;
   }
 
   /// Siri Remote Menu button. The flutter_tvos native plugin emits it as a
@@ -1507,7 +1518,8 @@ class _GameScreenState extends State<GameScreen>
 
             return Focus(
               focusNode: _gameFocusNode,
-              onKeyEvent: _onRootKey,
+              // Gameplay keys are handled globally via HardwareKeyboard
+              // (see [_onHardwareKey]); this node just anchors gameplay focus.
               // SizedBox.expand forces the FittedBox to the full screen —
               // under Center's loose constraints it would shrink-wrap the
               // logical viewport and render unscaled.
