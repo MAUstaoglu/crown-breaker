@@ -194,7 +194,20 @@ class _LevelTileState extends State<_LevelTile> {
       onTap: widget.onSelect,
       autofocus: widget.autofocus && !isLocked,
       canRequestFocus: !isLocked,
-      onFocusChange: (f) => setState(() => _focused = f),
+      onFocusChange: (f) {
+        setState(() => _focused = f);
+        // Keep the focused tile on screen. Without this the lazy grid can
+        // scroll the Siri Remote's target out of view (and then dispose it,
+        // dropping focus entirely). Aligned to leave a margin above/below.
+        if (f) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
+      },
       focusColor: Colors.transparent, // The border/glow below is the cue.
       child: Container(
         decoration: BoxDecoration(
