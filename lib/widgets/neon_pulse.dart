@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../constants.dart';
+import '../models.dart';
 
 /// Draws [shaders/neon_pulse.frag] as a glowing ring on the playfield border,
 /// behind [child].
@@ -32,16 +33,23 @@ class NeonPulse extends StatefulWidget {
     super.key,
     required this.accent,
     required this.child,
-    this.impact = 0.0,
+    this.flares = const <RingFlare>[],
+    this.danger = 0.0,
+    this.threat = 0.0,
     this.enabled = true,
   });
 
-  /// The world's neon hue.
+  /// The world's neon hue. Bends toward red as [danger] rises.
   final Color accent;
 
-  /// 0..1 surge, driven by the game's screen shake — brick breaks and lost
-  /// lives make the ring flare and race.
-  final double impact;
+  /// Live impacts to burn onto the ring. Only the last four are used.
+  final List<RingFlare> flares;
+
+  /// 0 at full lives, 1 on the last one.
+  final double danger;
+
+  /// 0..1, how close the nearest ball is to the edge that costs a life.
+  final double threat;
 
   /// Set false to skip the shader entirely.
   final bool enabled;
@@ -101,7 +109,9 @@ class _NeonPulseState extends State<NeonPulse>
         program: program,
         seconds: _seconds,
         accent: widget.accent,
-        impact: widget.impact,
+        flares: widget.flares,
+        danger: widget.danger,
+        threat: widget.threat,
       ),
       child: widget.child,
     );
@@ -113,19 +123,23 @@ class _NeonPulsePainter extends CustomPainter {
     required this.program,
     required this.seconds,
     required this.accent,
-    required this.impact,
+    required this.flares,
+    required this.danger,
+    required this.threat,
   }) : super(repaint: seconds);
 
   final ui.FragmentProgram program;
   final ValueNotifier<double> seconds;
   final Color accent;
-  final double impact;
+  final List<RingFlare> flares;
+  final double danger;
+  final double threat;
 
   @override
   void paint(Canvas canvas, Size size) {
     // Uniform indices follow declaration order in the .frag, with vectors
     // flattened: uSize.xy = 0,1 · uTime = 2 · uAccent.rgb = 3,4,5 ·
-    // uImpact = 6.
+    // uDanger = 6 · uThreat = 7 · uFlareP = 8..11 · uFlareI = 12..15.
     final ui.FragmentShader shader = program.fragmentShader()
       ..setFloat(0, size.width)
       ..setFloat(1, size.height)
@@ -133,7 +147,15 @@ class _NeonPulsePainter extends CustomPainter {
       ..setFloat(3, accent.r)
       ..setFloat(4, accent.g)
       ..setFloat(5, accent.b)
-      ..setFloat(6, impact);
+      ..setFloat(6, danger)
+      ..setFloat(7, threat);
+
+    // Four slots, padded with zero intensity when fewer are live.
+    for (int i = 0; i < 4; i++) {
+      final RingFlare? f = i < flares.length ? flares[i] : null;
+      shader.setFloat(8 + i, f?.position ?? 0.0);
+      shader.setFloat(12 + i, f == null ? 0.0 : f.life.clamp(0.0, 1.0));
+    }
 
     // Thick enough to be unmistakable from across a room, still a thin band of
     // actual shaded pixels. Sits on the same path as the painter's own border.
@@ -156,6 +178,7 @@ class _NeonPulsePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_NeonPulsePainter old) =>
-      old.accent != accent || old.impact != impact;
+  // The ticker repaints every frame regardless; flares and state are read
+  // fresh out of the live game objects on each paint.
+  bool shouldRepaint(_NeonPulsePainter old) => true;
 }

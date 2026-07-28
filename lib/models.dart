@@ -166,3 +166,17 @@ class LevelData {
     this.slideFactor = 1.0,
   });
 }
+
+/// A flash on the border ring, recorded where something struck it.
+///
+/// [position] is a normalised 0..1 coordinate around the playfield perimeter,
+/// using the same angular mapping as `shaders/neon_pulse.frag`, so the flare
+/// lands on the ring exactly where the collision happened on screen.
+class RingFlare {
+  RingFlare({required this.position, this.life = 1.0});
+
+  final double position;
+
+  /// Decays to 0 over a few hundred milliseconds, then the flare is dropped.
+  double life;
+}

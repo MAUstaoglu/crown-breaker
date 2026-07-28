@@ -15,6 +15,7 @@ uniform float uTime;   // 0    — seconds, streams the energy segments
 uniform vec3 uAccent;  // 1, 2, 3 — the world's neon hue
 uniform vec2 uHead;    // 4, 5 — ball centre, in the same space as gl_FragCoord
 uniform float uLen;    // 6    — trail length in pixels
+uniform float uHeat;   // 7    — 0..1 combo heat, runs the tint toward gold
 
 out vec4 fragColor;
 
@@ -30,8 +31,12 @@ void main() {
 
   float glow = fade * bands * 2.0;
 
+  // A running combo burns the trail from the world's hue toward gold, so a
+  // hot streak is legible from the trail alone.
+  vec3 tint = mix(uAccent, vec3(1.0, 0.80, 0.30), uHeat);
+
   // White-hot core where the trail meets the ball.
-  vec3 col = uAccent * glow + vec3(max(0.0, glow - 1.0) * 0.8);
+  vec3 col = tint * glow + vec3(max(0.0, glow - 1.0) * 0.8);
 
   // Flutter expects premultiplied alpha.
   float alpha = clamp(glow, 0.0, 1.0);

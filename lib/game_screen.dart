@@ -105,6 +105,10 @@ class _GameScreenState extends State<GameScreen>
   /// null if it fails — the painter simply draws no trail.
   ui.FragmentProgram? _trailProgram;
 
+  /// Live flashes on the border ring, newest last. The shader takes four, so
+  /// older ones are dropped rather than queued.
+  final List<RingFlare> _ringFlares = <RingFlare>[];
+
   // tvOS: Siri Remote (RCU) touch listener + last touch position for delta.
   TvRemoteTouchListener? _remoteListener;
   double? _lastRemoteX;
@@ -294,6 +298,41 @@ class _GameScreenState extends State<GameScreen>
       _levelSelectScrollController.position.maxScrollExtent,
     );
     _levelSelectScrollController.jumpTo(newOffset);
+  }
+
+  /// 0 at full lives, 1 on the last one — bends the ring toward red.
+  double get _ringDanger => ((3 - _lives) / 2.0).clamp(0.0, 1.0);
+
+  /// How close the nearest ball is to the edge that costs a life, 0..1. Only
+  /// the last third of the run-up counts, so the ring stays calm until the
+  /// ball is genuinely committed.
+  double get _ringThreat {
+    if (_gameState != GameState.playing || _balls.isEmpty) return 0.0;
+    final double edge = _verticalMode ? _paddleX : _paddleY;
+    final double span = (_verticalMode ? _screenWidth : _screenHeight) / 3.0;
+    double nearest = double.infinity;
+    for (final ball in _balls) {
+      if (ball.attached) continue;
+      final double gap = edge - (_verticalMode ? ball.x : ball.y);
+      if (gap < nearest) nearest = gap;
+    }
+    if (!nearest.isFinite || span <= 0) return 0.0;
+    return (1.0 - (nearest / span)).clamp(0.0, 1.0);
+  }
+
+  /// Records a flash on the border ring at the perimeter position nearest
+  /// ([x], [y]).
+  ///
+  /// The mapping here mirrors `neon_pulse.frag` exactly — centre, correct for
+  /// aspect, then `atan2` — so the flare appears on the ring at the point the
+  /// player just saw the ball hit.
+  void _flareRingAt(double x, double y) {
+    if (!kNeonPulseShader || _screenWidth <= 0 || _screenHeight <= 0) return;
+    final double px = ((x / _screenWidth) - 0.5) * (_screenWidth / _screenHeight);
+    final double py = (y / _screenHeight) - 0.5;
+    final double a = (math.atan2(py, px) / (2 * math.pi)) + 1.0;
+    _ringFlares.add(RingFlare(position: a % 1.0));
+    if (_ringFlares.length > 4) _ringFlares.removeAt(0);
   }
 
   // Trigger tactile feedback on the watch's Taptic Engine.
@@ -829,6 +868,14 @@ class _GameScreenState extends State<GameScreen>
       if (_screenShake < 0.0) _screenShake = 0.0;
     }
 
+    // Decay border-ring flares; ~0.4s from full brightness to gone.
+    if (_ringFlares.isNotEmpty) {
+      for (final flare in _ringFlares) {
+        flare.life -= dt * 2.5;
+      }
+      _ringFlares.removeWhere((RingFlare f) => f.life <= 0.0);
+    }
+
     // 2. Animate paddle expand.
     if (paddleWidth != targetPaddleWidth) {
       final step = dt * 100.0;
@@ -953,31 +1000,37 @@ class _GameScreenState extends State<GameScreen>
             ball.x = margin + ball.radius;
             ball.vx = -ball.vx;
             _sendHaptic("click");
+            _flareRingAt(ball.x, ball.y);
           }
           if (ball.y - ball.radius < margin) {
             ball.y = margin + ball.radius;
             ball.vy = -ball.vy;
             _sendHaptic("click");
+            _flareRingAt(ball.x, ball.y);
           } else if (ball.y + ball.radius > _screenHeight - margin) {
             ball.y = _screenHeight - margin - ball.radius;
             ball.vy = -ball.vy;
             _sendHaptic("click");
+            _flareRingAt(ball.x, ball.y);
           }
         } else {
           if (ball.x - ball.radius < margin) {
             ball.x = margin + ball.radius;
             ball.vx = -ball.vx;
             _sendHaptic("click");
+            _flareRingAt(ball.x, ball.y);
           } else if (ball.x + ball.radius > _screenWidth - margin) {
             ball.x = _screenWidth - margin - ball.radius;
             ball.vx = -ball.vx;
             _sendHaptic("click");
+            _flareRingAt(ball.x, ball.y);
           }
 
           if (ball.y - ball.radius < margin) {
             ball.y = margin + ball.radius;
             ball.vy = -ball.vy;
             _sendHaptic("click");
+            _flareRingAt(ball.x, ball.y);
           }
         }
       }
@@ -1291,6 +1344,7 @@ class _GameScreenState extends State<GameScreen>
         _score += pts;
       });
       _floatingScores.add(FloatingScore(x: brick.rect.center.dx, y: brick.rect.center.dy, score: pts, life: 1.0));
+      _flareRingAt(brick.rect.center.dx, brick.rect.center.dy);
       _spawnExplosion(brick.rect.center.dx, brick.rect.center.dy, brick.baseColor,
           count: brick.type == 'E' ? 20 : 12);
 
@@ -1529,10 +1583,9 @@ class _GameScreenState extends State<GameScreen>
                       child: NeonPulse(
                       accent: _levels[_currentLevelIndex].themeColor,
                       enabled: kNeonPulseShader,
-                      // _screenShake peaks at 8 (a lost life) and decays; a
-                      // brick break sits at 4. Reusing it costs nothing and
-                      // ties the ring to what just happened in the game.
-                      impact: (_screenShake / 8.0).clamp(0.0, 1.0),
+                      flares: _ringFlares,
+                      danger: _ringDanger,
+                      threat: _ringThreat,
                   child: Stack(
                     children: [
                       // Interactive playfield canvas.
@@ -1664,6 +1717,22 @@ class _GameScreenState extends State<GameScreen>
 
 /// Renders the entire playfield each frame. Reads [state] directly to avoid
 /// per-frame allocations; all [Paint] objects are cached.
+/// A comet wedge: a triangle with its base across the ball at [head] and its
+/// apex [length] behind, opposite [dir] (which must be unit length).
+///
+/// Filled rather than stroked, so the silhouette itself tapers — the shader
+/// then fades it along the same axis, and the two together read as a comet
+/// instead of a stripe.
+Path _trailPath(Offset head, Offset dir, double length, double halfWidth) {
+  final Offset perp = Offset(-dir.dy, dir.dx) * halfWidth;
+  final Offset apex = head - dir * length;
+  return Path()
+    ..moveTo(head.dx + perp.dx, head.dy + perp.dy)
+    ..lineTo(apex.dx, apex.dy)
+    ..lineTo(head.dx - perp.dx, head.dy - perp.dy)
+    ..close();
+}
+
 class _GamePainter extends CustomPainter {
   final _GameScreenState state;
 
@@ -1828,19 +1897,29 @@ class _GamePainter extends CustomPainter {
     // 4. Balls, each behind its own shader comet trail.
     final ui.FragmentProgram? trail = state._trailProgram;
     if (trail != null) {
+      // The wedge runs backwards from the ball and is not bounded by the
+      // ball's own position, so near a wall it would spill over the border
+      // ring and outside the playfield. Clip it to the same rounded rect the
+      // ball actually bounces in.
+      canvas.save();
+      canvas.clipRRect(borderRRect);
       for (final ball in state._balls) {
         // A ball resting on the paddle has no direction to trail along.
         if (ball.attached) continue;
         final double speed = math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
         if (speed < 0.001) continue;
 
-        final double length = ball.radius * 14.0;
+        // A faster ball drags a longer tail — the streak reads as speed
+        // rather than as a fixed decoration.
+        final double pace =
+            (ball.speed / state._baseBallSpeed).clamp(0.6, 1.8);
+        final double length = ball.radius * 10.0 * pace;
         final Offset head = Offset(ball.x, ball.y);
-        final Offset tail = head - Offset(ball.vx, ball.vy) / speed * length;
+        final Offset dir = Offset(ball.vx, ball.vy) / speed;
 
         // Uniform indices follow declaration order in the .frag, vectors
         // flattened: uTime = 0 · uAccent.rgb = 1,2,3 · uHead.xy = 4,5 ·
-        // uLen = 6.
+        // uLen = 6 · uHeat = 7.
         final ui.FragmentShader shader = trail.fragmentShader()
           ..setFloat(0, state._levelTime)
           ..setFloat(1, themeColor.r)
@@ -1848,18 +1927,16 @@ class _GamePainter extends CustomPainter {
           ..setFloat(3, themeColor.b)
           ..setFloat(4, ball.x + shakeDx)
           ..setFloat(5, ball.y + shakeDy)
-          ..setFloat(6, length);
+          ..setFloat(6, length)
+          ..setFloat(7, (state._comboCount / 5.0).clamp(0.0, 1.0));
 
-        canvas.drawLine(
-          head,
-          tail,
-          Paint()
-            ..shader = shader
-            ..strokeCap = StrokeCap.round
-            ..strokeWidth = ball.radius * 3.0,
+        canvas.drawPath(
+          _trailPath(head, dir, length, ball.radius * 1.7),
+          Paint()..shader = shader,
         );
         shader.dispose();
       }
+      canvas.restore();
     }
 
     for (final ball in state._balls) {
