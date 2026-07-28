@@ -1586,6 +1586,12 @@ class _GameScreenState extends State<GameScreen>
                       flares: _ringFlares,
                       danger: _ringDanger,
                       threat: _ringThreat,
+                      // The paddle guards the bottom, or the right-hand side
+                      // in vertical mode; that is the edge the ring marks as
+                      // the one you lose through.
+                      perilAxis: _verticalMode
+                          ? const Offset(1, 0)
+                          : const Offset(0, 1),
                   child: Stack(
                     children: [
                       // Interactive playfield canvas.
@@ -1930,8 +1936,12 @@ class _GamePainter extends CustomPainter {
           ..setFloat(6, length)
           ..setFloat(7, (state._comboCount / 5.0).clamp(0.0, 1.0));
 
+        // Base exactly the ball's diameter: the wedge leaves the ball at its
+        // silhouette and only ever narrows. Wider than the radius and the
+        // trail bulges out past the ball, which reads as a blob stuck to it
+        // rather than as something streaming off it.
         canvas.drawPath(
-          _trailPath(head, dir, length, ball.radius * 1.7),
+          _trailPath(head, dir, length, ball.radius),
           Paint()..shader = shader,
         );
         shader.dispose();

@@ -36,6 +36,7 @@ class NeonPulse extends StatefulWidget {
     this.flares = const <RingFlare>[],
     this.danger = 0.0,
     this.threat = 0.0,
+    this.perilAxis = const Offset(0, 1),
     this.enabled = true,
   });
 
@@ -50,6 +51,10 @@ class NeonPulse extends StatefulWidget {
 
   /// 0..1, how close the nearest ball is to the edge that costs a life.
   final double threat;
+
+  /// Which edge the paddle guards — the one the ball is lost through.
+  /// `(0, 1)` for the bottom, `(1, 0)` for the right in vertical mode.
+  final Offset perilAxis;
 
   /// Set false to skip the shader entirely.
   final bool enabled;
@@ -112,6 +117,7 @@ class _NeonPulseState extends State<NeonPulse>
         flares: widget.flares,
         danger: widget.danger,
         threat: widget.threat,
+        perilAxis: widget.perilAxis,
       ),
       child: widget.child,
     );
@@ -126,6 +132,7 @@ class _NeonPulsePainter extends CustomPainter {
     required this.flares,
     required this.danger,
     required this.threat,
+    required this.perilAxis,
   }) : super(repaint: seconds);
 
   final ui.FragmentProgram program;
@@ -134,12 +141,14 @@ class _NeonPulsePainter extends CustomPainter {
   final List<RingFlare> flares;
   final double danger;
   final double threat;
+  final Offset perilAxis;
 
   @override
   void paint(Canvas canvas, Size size) {
     // Uniform indices follow declaration order in the .frag, with vectors
     // flattened: uSize.xy = 0,1 · uTime = 2 · uAccent.rgb = 3,4,5 ·
-    // uDanger = 6 · uThreat = 7 · uFlareP = 8..11 · uFlareI = 12..15.
+    // uDanger = 6 · uThreat = 7 · uFlareP = 8..11 · uFlareI = 12..15 ·
+    // uPerilDir.xy = 16,17.
     final ui.FragmentShader shader = program.fragmentShader()
       ..setFloat(0, size.width)
       ..setFloat(1, size.height)
@@ -156,6 +165,10 @@ class _NeonPulsePainter extends CustomPainter {
       shader.setFloat(8 + i, f?.position ?? 0.0);
       shader.setFloat(12 + i, f == null ? 0.0 : f.life.clamp(0.0, 1.0));
     }
+
+    shader
+      ..setFloat(16, perilAxis.dx)
+      ..setFloat(17, perilAxis.dy);
 
     // Thick enough to be unmistakable from across a room, still a thin band of
     // actual shaded pixels. Sits on the same path as the painter's own border.
