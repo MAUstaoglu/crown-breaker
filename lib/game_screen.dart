@@ -14,7 +14,7 @@ import 'constants.dart';
 import 'levels.dart';
 import 'models.dart';
 import 'widgets/menus.dart';
-import 'widgets/neon_field.dart';
+import 'widgets/neon_pulse.dart';
 import 'widgets/overlays.dart';
 
 /// The single screen that hosts every game state — menus, level select, and
@@ -1510,11 +1510,15 @@ class _GameScreenState extends State<GameScreen>
                   child: SizedBox(
                     width: _screenWidth,
                     height: _screenHeight,
-                    child: NeonField(
+                    child: ColoredBox(
                       color: levelBackgroundColor(_currentLevelIndex + 1),
+                      child: NeonPulse(
                       accent: _levels[_currentLevelIndex].themeColor,
-                      enabled: kNeonFieldShader,
-                      energy: _gameState == GameState.playing ? 1.0 : 0.0,
+                      enabled: kNeonPulseShader,
+                      // _screenShake peaks at 8 (a lost life) and decays; a
+                      // brick break sits at 4. Reusing it costs nothing and
+                      // ties the ring to what just happened in the game.
+                      impact: (_screenShake / 8.0).clamp(0.0, 1.0),
                   child: Stack(
                     children: [
                       // Interactive playfield canvas.
@@ -1631,6 +1635,7 @@ class _GameScreenState extends State<GameScreen>
                         ),
                         ],
                       ),
+                    ),
                     ),
                   ),
                 ),

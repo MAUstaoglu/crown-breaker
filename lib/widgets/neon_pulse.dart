@@ -1,13 +1,22 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Paints [shaders/neon_field.frag] behind [child], tinted to [color].
+import '../constants.dart';
+
+/// Draws [shaders/neon_pulse.frag] as a glowing ring on the playfield border,
+/// behind [child].
 ///
-/// A drop-in replacement for `Container(color: …, child: …)`. If the shader
-/// cannot be compiled — an engine without fragment-shader support, a bad
-/// build — this falls back to the flat [color] and the game is unaffected.
+/// Behind, not in front: a ring thick enough to read across a room is thick
+/// enough to sit on the edge bricks and the paddle, and covering gameplay is
+/// worse than being partly covered by it. Underneath, the ball and paddle
+/// crossing the ring look like they are riding an energy field.
+///
+/// The shader is painted as a *stroke*, not a fill, so only the ring's pixels
+/// are shaded — the rule that makes a full-screen-looking effect affordable on
+/// the watch. If the program fails to compile, [child] renders untouched.
 ///
 /// Two rules from the flutter-watchos shader guide are load-bearing here. The
 /// [ui.FragmentProgram] is compiled once per process and cached statically;
@@ -18,41 +27,37 @@ import 'package:flutter/scheduler.dart';
 ///
 /// The ticker drives a [ValueNotifier] wired to the painter's `repaint`, so a
 /// frame costs a repaint and not a rebuild of the whole game subtree.
-class NeonField extends StatefulWidget {
-  const NeonField({
+class NeonPulse extends StatefulWidget {
+  const NeonPulse({
     super.key,
-    required this.color,
     required this.accent,
     required this.child,
-    this.energy = 1.0,
+    this.impact = 0.0,
     this.enabled = true,
   });
 
-  /// The world's background. Also the fallback fill when the shader is
-  /// unavailable.
-  final Color color;
-
-  /// The world's neon hue, added on top of [color] by the field.
+  /// The world's neon hue.
   final Color accent;
 
-  /// 0 dims the field for menus, 1 is full brightness during play.
-  final double energy;
+  /// 0..1 surge, driven by the game's screen shake — brick breaks and lost
+  /// lives make the ring flare and race.
+  final double impact;
 
-  /// Set false to paint the flat [color] and skip the shader entirely.
+  /// Set false to skip the shader entirely.
   final bool enabled;
 
   final Widget child;
 
   @override
-  State<NeonField> createState() => _NeonFieldState();
+  State<NeonPulse> createState() => _NeonPulseState();
 }
 
-class _NeonFieldState extends State<NeonField>
+class _NeonPulseState extends State<NeonPulse>
     with SingleTickerProviderStateMixin {
   static ui.FragmentProgram? _program;
   static Future<void>? _loading;
 
-  /// Seconds since this field mounted; also the painter's repaint signal.
+  /// Seconds since this ring mounted; also the painter's repaint signal.
   final ValueNotifier<double> _seconds = ValueNotifier<double>(0);
 
   late final Ticker _ticker = createTicker((Duration elapsed) {
@@ -68,9 +73,9 @@ class _NeonFieldState extends State<NeonField>
 
   void _ensureProgram() {
     if (_program != null) return;
-    _loading ??= ui.FragmentProgram.fromAsset('shaders/neon_field.frag').then(
+    _loading ??= ui.FragmentProgram.fromAsset('shaders/neon_pulse.frag').then(
       (ui.FragmentProgram program) => _program = program,
-      // Leave _program null on failure — build() falls back to the flat colour.
+      // Leave _program null on failure — build() renders the child untouched.
       onError: (Object _, StackTrace _) {},
     );
     _loading!.whenComplete(() {
@@ -89,57 +94,68 @@ class _NeonFieldState extends State<NeonField>
   Widget build(BuildContext context) {
     final ui.FragmentProgram? program = _program;
     if (!widget.enabled || program == null) {
-      return ColoredBox(color: widget.color, child: widget.child);
+      return widget.child;
     }
     return CustomPaint(
-      painter: _NeonFieldPainter(
+      painter: _NeonPulsePainter(
         program: program,
         seconds: _seconds,
-        color: widget.color,
         accent: widget.accent,
-        energy: widget.energy,
+        impact: widget.impact,
       ),
       child: widget.child,
     );
   }
 }
 
-class _NeonFieldPainter extends CustomPainter {
-  _NeonFieldPainter({
+class _NeonPulsePainter extends CustomPainter {
+  _NeonPulsePainter({
     required this.program,
     required this.seconds,
-    required this.color,
     required this.accent,
-    required this.energy,
+    required this.impact,
   }) : super(repaint: seconds);
 
   final ui.FragmentProgram program;
   final ValueNotifier<double> seconds;
-  final Color color;
   final Color accent;
-  final double energy;
+  final double impact;
 
   @override
   void paint(Canvas canvas, Size size) {
     // Uniform indices follow declaration order in the .frag, with vectors
-    // flattened: uSize.xy = 0,1 · uTime = 2 · uBase.rgb = 3,4,5 ·
-    // uAccent.rgb = 6,7,8 · uEnergy = 9.
+    // flattened: uSize.xy = 0,1 · uTime = 2 · uAccent.rgb = 3,4,5 ·
+    // uImpact = 6.
     final ui.FragmentShader shader = program.fragmentShader()
       ..setFloat(0, size.width)
       ..setFloat(1, size.height)
       ..setFloat(2, seconds.value)
-      ..setFloat(3, color.r)
-      ..setFloat(4, color.g)
-      ..setFloat(5, color.b)
-      ..setFloat(6, accent.r)
-      ..setFloat(7, accent.g)
-      ..setFloat(8, accent.b)
-      ..setFloat(9, energy);
-    canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
+      ..setFloat(3, accent.r)
+      ..setFloat(4, accent.g)
+      ..setFloat(5, accent.b)
+      ..setFloat(6, impact);
+
+    // Thick enough to be unmistakable from across a room, still a thin band of
+    // actual shaded pixels. Sits on the same path as the painter's own border.
+    final double band = math.max(4.0, size.shortestSide * 0.045);
+    final Rect border = Rect.fromLTWH(
+      kGameMargin,
+      kGameMargin,
+      size.width - 2 * kGameMargin,
+      size.height - 2 * kGameMargin,
+    );
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(border, const Radius.circular(kGameCornerRadius)),
+      Paint()
+        ..shader = shader
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = band,
+    );
     shader.dispose();
   }
 
   @override
-  bool shouldRepaint(_NeonFieldPainter old) =>
-      old.color != color || old.accent != accent || old.energy != energy;
+  bool shouldRepaint(_NeonPulsePainter old) =>
+      old.accent != accent || old.impact != impact;
 }

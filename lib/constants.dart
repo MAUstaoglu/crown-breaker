@@ -5,11 +5,11 @@ import 'level_gen.dart';
 /// Set to true to unlock all 100 levels for testing/debugging.
 const bool kUnlockAllLevels = false;
 
-/// Draw the animated neon field behind the playfield. Full-screen shading is
-/// the single most expensive thing this app can do — especially on the watch —
-/// so it stays behind a switch until it has been measured in profile on real
-/// hardware. See [NeonField].
-const bool kNeonFieldShader = true;
+/// Draw the pulsing neon ring on the playfield border. Painted as a stroke, so
+/// only the ring's pixels are shaded — cheap enough for the watch, unlike a
+/// full-screen effect. Still worth measuring in profile on real hardware before
+/// a demo. See [NeonPulse].
+const bool kNeonPulseShader = true;
 
 /// Inset of the playfield from the screen edge.
 const double kGameMargin = 6.0;
