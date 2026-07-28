@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -100,6 +101,10 @@ class _GameScreenState extends State<GameScreen>
 
   StreamSubscription<CrownRotationEvent>? _crownSubscription;
 
+  /// Compiled once for the life of the screen; null until it loads, and stays
+  /// null if it fails — the painter simply draws no trail.
+  ui.FragmentProgram? _trailProgram;
+
   // tvOS: Siri Remote (RCU) touch listener + last touch position for delta.
   TvRemoteTouchListener? _remoteListener;
   double? _lastRemoteX;
@@ -171,6 +176,15 @@ class _GameScreenState extends State<GameScreen>
     }
 
     _ticker = createTicker(_onTick);
+
+    if (kBallTrailShader) {
+      ui.FragmentProgram.fromAsset('shaders/ball_trail.frag').then(
+        (ui.FragmentProgram program) {
+          if (mounted) setState(() => _trailProgram = program);
+        },
+        onError: (Object _, StackTrace _) {},
+      );
+    }
   }
 
   @override
@@ -1673,10 +1687,15 @@ class _GamePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rand = math.Random();
 
+    // Kept in scope: a fragment shader's coordinates are in the destination
+    // space, so anything shaded has to add the shake back to its own
+    // coordinates to stay pinned to what the canvas transform drew.
+    double shakeDx = 0.0;
+    double shakeDy = 0.0;
     if (state._screenShake > 0.1) {
-      final dx = (rand.nextDouble() - 0.5) * state._screenShake;
-      final dy = (rand.nextDouble() - 0.5) * state._screenShake;
-      canvas.translate(dx, dy);
+      shakeDx = (rand.nextDouble() - 0.5) * state._screenShake;
+      shakeDy = (rand.nextDouble() - 0.5) * state._screenShake;
+      canvas.translate(shakeDx, shakeDy);
     }
 
     final themeColor = state._levels[state._currentLevelIndex].themeColor;
@@ -1806,7 +1825,43 @@ class _GamePainter extends CustomPainter {
       ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 3.0);
     canvas.drawRRect(paddleRRect, _paddleGlowPaint);
 
-    // 4. Balls.
+    // 4. Balls, each behind its own shader comet trail.
+    final ui.FragmentProgram? trail = state._trailProgram;
+    if (trail != null) {
+      for (final ball in state._balls) {
+        // A ball resting on the paddle has no direction to trail along.
+        if (ball.attached) continue;
+        final double speed = math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        if (speed < 0.001) continue;
+
+        final double length = ball.radius * 14.0;
+        final Offset head = Offset(ball.x, ball.y);
+        final Offset tail = head - Offset(ball.vx, ball.vy) / speed * length;
+
+        // Uniform indices follow declaration order in the .frag, vectors
+        // flattened: uTime = 0 · uAccent.rgb = 1,2,3 · uHead.xy = 4,5 ·
+        // uLen = 6.
+        final ui.FragmentShader shader = trail.fragmentShader()
+          ..setFloat(0, state._levelTime)
+          ..setFloat(1, themeColor.r)
+          ..setFloat(2, themeColor.g)
+          ..setFloat(3, themeColor.b)
+          ..setFloat(4, ball.x + shakeDx)
+          ..setFloat(5, ball.y + shakeDy)
+          ..setFloat(6, length);
+
+        canvas.drawLine(
+          head,
+          tail,
+          Paint()
+            ..shader = shader
+            ..strokeCap = StrokeCap.round
+            ..strokeWidth = ball.radius * 3.0,
+        );
+        shader.dispose();
+      }
+    }
+
     for (final ball in state._balls) {
       _ballPaint
         ..color = Colors.white

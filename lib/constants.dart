@@ -11,6 +11,10 @@ const bool kUnlockAllLevels = false;
 /// a demo. See [NeonPulse].
 const bool kNeonPulseShader = true;
 
+/// Draw the shader comet trail behind each ball. Stroked along the ball's
+/// velocity, so the shaded area is a short line and not a region.
+const bool kBallTrailShader = true;
+
 /// Inset of the playfield from the screen edge.
 const double kGameMargin = 6.0;
 
