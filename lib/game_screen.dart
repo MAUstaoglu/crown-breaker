@@ -8,7 +8,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tvos/flutter_tvos.dart';
 import 'package:flutter_watchos/flutter_watchos.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'constants.dart';
@@ -99,7 +98,6 @@ class _GameScreenState extends State<GameScreen>
   final math.Random _random = math.Random();
 
   StreamSubscription<CrownRotationEvent>? _crownSubscription;
-  StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
 
   // tvOS: Siri Remote (RCU) touch listener + last touch position for delta.
   TvRemoteTouchListener? _remoteListener;
@@ -133,14 +131,16 @@ class _GameScreenState extends State<GameScreen>
     super.initState();
     _loadSaveData();
 
-    // tvOS check must come first: Platform.isIOS is true on tvOS (iOS-family),
-    // so FlutterWatchosPlatform.isIos would otherwise capture the Apple TV.
+    // The app ships on exactly two screens: Apple TV and Apple Watch. Note
+    // that `Platform.isIOS` is true on tvOS (it is an iOS-family OS), so the
+    // Apple TV must be identified by [FlutterTvosPlatform.isTvos], not by
+    // elimination.
     _isTv = FlutterTvosPlatform.isTvos;
     if (_isTv) {
       // Siri Remote Menu arrives as a navigation popRoute (Android-back
       // parity), not a key event — observe it for pause / back handling.
       WidgetsBinding.instance.addObserver(this);
-      // Apple TV is a landscape display — use horizontal mode like iPhone.
+      // Apple TV is a landscape display.
       _verticalMode = false;
       // Drive the paddle with the Siri Remote touch surface (the RCU analog of
       // the Digital Crown). Menus/level-select navigate via the arrow-key and
@@ -155,11 +155,7 @@ class _GameScreenState extends State<GameScreen>
       // Gameplay keys go through HardwareKeyboard so they work even if focus is
       // momentarily lost (see [_onHardwareKey]).
       HardwareKeyboard.instance.addHandler(_onHardwareKey);
-    } else if (FlutterWatchosPlatform.isIos) {
-      // Default to horizontal mode on iOS (iPhone/iPad).
-      _verticalMode = false;
-      _initGyroscope();
-    } else if (FlutterWatchosPlatform.isWatch) {
+    } else {
       _verticalMode = true;
       // Hide system status bar / clock on watchOS.
       WatchStatusBar.hidden = true;
@@ -179,7 +175,6 @@ class _GameScreenState extends State<GameScreen>
   @override
   void dispose() {
     _crownSubscription?.cancel();
-    _gyroscopeSubscription?.cancel();
     if (_remoteListener != null) {
       TvRemoteController.instance.removeRawListener(_remoteListener!);
     }
@@ -286,107 +281,71 @@ class _GameScreenState extends State<GameScreen>
     _levelSelectScrollController.jumpTo(newOffset);
   }
 
-  // Initialize gyroscope sensor for tilt controls.
-  void _initGyroscope() {
-    _gyroscopeSubscription = gyroscopeEventStream().listen((event) {
-      if (_gameState == GameState.playing) {
-        setState(() {
-          if (_verticalMode) {
-            // Tilting phone forward/backward (pitch, rotation around X-axis) moves paddle up/down.
-            targetPaddleY += event.x * 12.0;
-            targetPaddleY = targetPaddleY.clamp(kPaddleClamp, _screenHeight - paddleWidth - kPaddleClamp);
-          } else {
-            // Tilting phone left/right (roll, rotation around Z-axis) moves paddle left/right.
-            targetPaddleX += event.z * 12.0;
-            targetPaddleX = targetPaddleX.clamp(kPaddleClamp, _screenWidth - paddleWidth - kPaddleClamp);
-          }
-        });
-      }
-    });
-  }
-
-  // Trigger tactile haptic feedback (Watch Taptic Engine or iOS HapticFeedback).
+  // Trigger tactile feedback on the watch's Taptic Engine.
   void _sendHaptic(String type) {
-    // Apple TV / Siri Remote has no haptics.
-    if (FlutterTvosPlatform.isTvos) return;
-    if (FlutterWatchosPlatform.isWatch) {
-      switch (type) {
-        case 'start':
-          WatchHaptics.play(WatchHapticType.start);
-          break;
-        case 'click':
-          WatchHaptics.play(WatchHapticType.click);
-          break;
-        case 'success':
-          WatchHaptics.play(WatchHapticType.success);
-          break;
-        case 'retry':
-          WatchHaptics.play(WatchHapticType.retry);
-          break;
-        case 'failure':
-          WatchHaptics.play(WatchHapticType.failure);
-          break;
-        case 'stop':
-          WatchHaptics.play(WatchHapticType.stop);
-          break;
-        default:
-          WatchHaptics.play(WatchHapticType.click);
-      }
-    } else {
-      // Haptics for iOS devices (iPhone/iPad).
-      switch (type) {
-        case 'start':
-        case 'success':
-          HapticFeedback.mediumImpact();
-          break;
-        case 'click':
-          HapticFeedback.selectionClick();
-          break;
-        case 'retry':
-          HapticFeedback.lightImpact();
-          break;
-        case 'failure':
-          HapticFeedback.heavyImpact();
-          break;
-      }
+    // The Taptic Engine is the watch's alone — the Siri Remote has no haptics.
+    if (!FlutterWatchosPlatform.isWatch) return;
+    switch (type) {
+      case 'start':
+        WatchHaptics.play(WatchHapticType.start);
+        break;
+      case 'click':
+        WatchHaptics.play(WatchHapticType.click);
+        break;
+      case 'success':
+        WatchHaptics.play(WatchHapticType.success);
+        break;
+      case 'retry':
+        WatchHaptics.play(WatchHapticType.retry);
+        break;
+      case 'failure':
+        WatchHaptics.play(WatchHapticType.failure);
+        break;
+      case 'stop':
+        WatchHaptics.play(WatchHapticType.stop);
+        break;
+      default:
+        WatchHaptics.play(WatchHapticType.click);
     }
   }
 
-  /// NSUserDefaults / on-disk key holding the whole save blob as JSON.
+  /// NSUserDefaults key holding the whole save blob as JSON.
   static const String _saveKey = 'crown_breaker_save';
 
-  String get _savePath {
-    final appDir = Directory.systemTemp.parent.path;
-    return '$appDir/Documents/crown_breaker_save.json';
-  }
+  /// Where the save used to live before shared_preferences covered every
+  /// platform. Read once on first launch of this version and copied into
+  /// NSUserDefaults; the file is left in place and never written again.
+  File get _legacySaveFile => File(
+        '${Directory.systemTemp.parent.path}/Documents/crown_breaker_save.json',
+      );
 
-  // Note: these read the static platform check directly rather than [_isTv],
-  // because _loadSaveData runs before initState assigns that field.
-
-  /// Reads the raw save JSON, or null if there is none. Apple TV has no
-  /// persistent Documents directory (it can be purged at any time), so it uses
-  /// NSUserDefaults via shared_preferences (+ shared_preferences_tvos); watch
-  /// and iOS keep the on-disk file, which persists there.
+  /// Reads the raw save JSON, or null if there is none.
+  ///
+  /// The same three lines serve both screens: shared_preferences resolves to
+  /// shared_preferences_watchos on the wrist and shared_preferences_tvos on the
+  /// TV, each an FFI implementation over NSUserDefaults. That backing store
+  /// matters most on Apple TV, whose Documents directory can be purged at any
+  /// time.
   Future<String?> _readSaveString() async {
-    if (FlutterTvosPlatform.isTvos) {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(_saveKey);
-    }
-    final file = File(_savePath);
-    return await file.exists() ? file.readAsString() : null;
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_saveKey);
+    if (stored != null) return stored;
+    return _migrateLegacySave(prefs);
   }
 
   Future<void> _writeSaveString(String contents) async {
-    if (FlutterTvosPlatform.isTvos) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_saveKey, contents);
-      return;
-    }
-    final dir = Directory('${Directory.systemTemp.parent.path}/Documents');
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    await File('${dir.path}/crown_breaker_save.json').writeAsString(contents);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_saveKey, contents);
+  }
+
+  /// Moves a pre-shared_preferences save into NSUserDefaults so upgrading
+  /// players keep their high score, stars, and unlocked levels.
+  Future<String?> _migrateLegacySave(SharedPreferences prefs) async {
+    final file = _legacySaveFile;
+    if (!await file.exists()) return null;
+    final contents = await file.readAsString();
+    await prefs.setString(_saveKey, contents);
+    return contents;
   }
 
   Future<void> _loadSaveData() async {

@@ -1,5 +1,5 @@
 name: crown_breaker
-description: "A neon brick-breaker game, played entirely with the Digital Crown on Apple Watch, and touch controls on iPhone."
+description: "A neon brick-breaker game on the smallest and biggest Apple screens — played with the Digital Crown on Apple Watch and the Siri Remote on Apple TV."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -36,15 +36,15 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   flutter_watchos: ^0.1.0-beta.2
-  sensors_plus: ^7.1.0
 
   # tvOS: platform detection + Siri Remote (RCU) input.
   flutter_tvos: ^1.1.2
 
-  # Persistent save data. shared_preferences_tvos backs the tvOS side with
-  # NSUserDefaults, the only reliable persistent store on Apple TV (the
-  # Documents directory can be purged). watch/iOS use the on-disk file.
+  # Persistent save data — one API on both screens. Each federated
+  # implementation is an FFI plugin over NSUserDefaults, which matters most on
+  # Apple TV, where the Documents directory can be purged at any time.
   shared_preferences: ^2.5.3
+  shared_preferences_watchos: ^0.1.0
   shared_preferences_tvos: ^0.0.2
 
 dev_dependencies:
