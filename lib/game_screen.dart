@@ -322,10 +322,10 @@ class _GameScreenState extends State<GameScreen>
   /// Reads the raw save JSON, or null if there is none.
   ///
   /// The same three lines serve both screens: shared_preferences resolves to
-  /// shared_preferences_watchos on the wrist and shared_preferences_tvos on the
-  /// TV, each an FFI implementation over NSUserDefaults. That backing store
-  /// matters most on Apple TV, whose Documents directory can be purged at any
-  /// time.
+  /// shared_preferences_watchos on the wrist (FFI — watchOS has no method
+  /// channels) and shared_preferences_tvos on the TV (a normal method-channel
+  /// plugin). Both persist to NSUserDefaults, which matters most on Apple TV,
+  /// whose Documents directory can be purged at any time.
   Future<String?> _readSaveString() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_saveKey);

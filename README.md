@@ -42,10 +42,11 @@ ball, and type sizes keep their proportions instead of rendering microscopic.
 
 Save data (high score, unlocked levels, star ratings) goes through a single
 `SharedPreferences` call on both platforms. Each screen resolves it to its own
-federated implementation — [`shared_preferences_watchos`][spw] and
-[`shared_preferences_tvos`][spt], both FFI over `NSUserDefaults`. That backing
-store matters on Apple TV in particular, where the Documents directory can be
-purged at any time.
+federated implementation — [`shared_preferences_watchos`][spw], an FFI plugin
+because watchOS has no method channels, and [`shared_preferences_tvos`][spt], an
+ordinary method-channel plugin. Both persist to `NSUserDefaults`, which matters
+on Apple TV in particular, where the Documents directory can be purged at any
+time.
 
 [spw]: https://pub.dev/packages/shared_preferences_watchos
 [spt]: https://pub.dev/packages/shared_preferences_tvos

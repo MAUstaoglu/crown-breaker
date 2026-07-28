@@ -40,8 +40,9 @@ dependencies:
   # tvOS: platform detection + Siri Remote (RCU) input.
   flutter_tvos: ^1.1.2
 
-  # Persistent save data — one API on both screens. Each federated
-  # implementation is an FFI plugin over NSUserDefaults, which matters most on
+  # Persistent save data — one API on both screens. The watch implementation is
+  # an FFI plugin (watchOS has no method channels); the tvOS one is a normal
+  # method-channel plugin. Both persist to NSUserDefaults, which matters most on
   # Apple TV, where the Documents directory can be purged at any time.
   shared_preferences: ^2.5.3
   shared_preferences_watchos: ^0.1.0
