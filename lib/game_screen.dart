@@ -14,6 +14,7 @@ import 'constants.dart';
 import 'levels.dart';
 import 'models.dart';
 import 'widgets/menus.dart';
+import 'widgets/neon_field.dart';
 import 'widgets/overlays.dart';
 
 /// The single screen that hosts every game state — menus, level select, and
@@ -1509,8 +1510,11 @@ class _GameScreenState extends State<GameScreen>
                   child: SizedBox(
                     width: _screenWidth,
                     height: _screenHeight,
-                    child: Container(
+                    child: NeonField(
                       color: levelBackgroundColor(_currentLevelIndex + 1),
+                      accent: _levels[_currentLevelIndex].themeColor,
+                      enabled: kNeonFieldShader,
+                      energy: _gameState == GameState.playing ? 1.0 : 0.0,
                   child: Stack(
                     children: [
                       // Interactive playfield canvas.
