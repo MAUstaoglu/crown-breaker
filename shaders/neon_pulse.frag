@@ -16,21 +16,30 @@
 // shaded — a few thousand on the watch instead of the whole screen. That is
 // the difference between an effect that fits the frame budget and one that
 // does not (see doc/shaders.md in the flutter-watchos repo).
+//
+// Everything that varies per *frame* rather than per *pixel* is computed in
+// Dart and arrives as a uniform. On a watch this runs on the CPU once per
+// shaded pixel, so a `sin` of a uniform means thousands of identical
+// transcendentals per frame where the painter would spend one. That is why
+// uDanger/uThreat/uTime are absent: what the shader needs from them are the
+// derived values below.
 
 #include <flutter/runtime_effect.glsl>
 
 precision mediump float;
 
-uniform vec2 uSize;    // 0, 1   — pixel size of the painted area
-uniform float uTime;   // 2      — seconds since mount
-uniform vec3 uAccent;  // 3,4,5  — the world's neon hue
-uniform float uDanger; // 6      — 0 at full lives, 1 on the last one
-uniform float uThreat; // 7      — 0..1, ball closing on the losing edge
-uniform vec4 uFlareP;  // 8..11  — perimeter positions of up to four impacts
-uniform vec4 uFlareI;  // 12..15 — their intensities, decaying to 0
-uniform vec2 uPerilDir; // 16,17 — picks the edge that costs a life: (0,1) for
-                        //         the paddle at the bottom, (1,0) in vertical
-                        //         mode where it guards the right-hand side
+uniform vec2 uSize;         // 0, 1   — pixel size of the painted area
+uniform float uBandPhase;   // 2      — travelling-band phase (time * rate)
+uniform vec3 uAccent;       // 3,4,5  — the world's neon hue
+uniform float uBreathe;     // 6      — precomputed breathing multiplier
+uniform float uPerilBoost;  // 7      — extra glow on the losing edge
+uniform vec4 uFlareP;       // 8..11  — perimeter positions of up to four impacts
+uniform vec4 uFlareI;       // 12..15 — their intensities, decaying to 0
+uniform vec2 uPerilDir;     // 16,17  — picks the edge that costs a life: (0,1)
+                            //          for the paddle at the bottom, (1,0) in
+                            //          vertical mode where it guards the right
+uniform vec3 uHot;          // 18,19,20 — the losing edge's hue for this frame
+uniform float uHazardPhase; // 21     — hazard-bar phase (time * rate)
 
 out vec4 fragColor;
 
@@ -61,37 +70,28 @@ void main() {
   // gradient into danger rather than as three walls and a stripe.
   float peril = smoothstep(0.62, 0.90, dot(uv, uPerilDir));
 
-  // Lives gone, or a ball bearing down on the open edge.
-  float urgency = max(uDanger, uThreat);
-
   // Hue is reserved for one question: which edge can kill you. The three solid
   // rails keep the world's accent no matter how bad things get, and only the
   // open edge runs warm — amber at rest, red as the situation deteriorates.
-  // The whole ring used to turn red on the last life, which is exactly when
-  // this distinction matters most; that cue now lives in brightness and rate
-  // so it cannot swallow the warning colour.
-  vec3 hot = mix(vec3(1.0, 0.55, 0.12), vec3(1.0, 0.12, 0.16), urgency);
-  vec3 accent = mix(uAccent, hot, peril);
+  vec3 accent = mix(uAccent, uHot, peril);
 
   // Chunky travelling segments — about ten around the perimeter. Obvious
   // per-pixel structure at any distance, and the part that could not be done
   // with a gradient.
-  float bands = 0.75 + 0.25 * sin(a * 60.0 - uTime * 6.0);
+  float bands = 0.75 + 0.25 * sin(a * 60.0 - uBandPhase);
 
   // The open edge gets its own pattern: tighter, near-square hazard bars that
   // run faster under pressure. Structure as well as hue, so the edge is still
   // marked for a colour-blind player or a washed-out projector.
-  float hazard = smoothstep(
-      0.35, 0.65, 0.5 + 0.5 * sin(a * 110.0 - uTime * (7.0 + 12.0 * urgency)));
+  float hazard =
+      smoothstep(0.35, 0.65, 0.5 + 0.5 * sin(a * 110.0 - uHazardPhase));
   float pattern = mix(bands, 0.55 + 0.75 * hazard, peril);
 
-  float breathe = 0.85 + 0.15 * sin(uTime * (2.2 + 6.0 * urgency));
-
-  float glow = 1.15 * pattern * breathe;
+  float glow = 1.15 * pattern * uBreathe;
 
   // The open edge always burns hotter than the rails, and flares up further as
   // a ball commits to it.
-  glow *= 1.0 + peril * (0.35 + 1.5 * urgency);
+  glow *= 1.0 + peril * uPerilBoost;
 
   // Impacts. Each one is a real collision the player just caused.
   glow += 3.2 * flare(a, uFlareP.x, uFlareI.x);
