@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart';
 import 'levels.dart';
 import 'models.dart';
+import 'screen_metrics.dart';
 import 'widgets/menus.dart';
 import 'widgets/neon_pulse.dart';
 import 'widgets/overlays.dart';
@@ -47,6 +48,11 @@ class _GameScreenState extends State<GameScreen>
   // Screen constraints (set on first frame / layout)
   double _screenWidth = 200.0;
   double _screenHeight = 200.0;
+
+  /// The panel resolved into the fixed logical stage everything below is drawn
+  /// in, plus the display's real corner radius. Replaced on every layout pass;
+  /// [ScreenMetrics.unknown] only stands in for the frame before the first one.
+  ScreenMetrics _metrics = ScreenMetrics.unknown;
 
   bool _verticalMode = false;
 
@@ -125,8 +131,10 @@ class _GameScreenState extends State<GameScreen>
   /// it were a traversal candidate every arrow press on a menu could "move"
   /// focus onto this invisible node (nothing highlighted = focus looks lost).
   /// It must only gain focus when [_focusGameplay] requests it explicitly.
-  final FocusNode _gameFocusNode =
-      FocusNode(debugLabel: 'CrownBreakerGame', skipTraversal: true);
+  final FocusNode _gameFocusNode = FocusNode(
+    debugLabel: 'CrownBreakerGame',
+    skipTraversal: true,
+  );
 
   /// tvOS holistic focus guard: the last "real" (leaf) control that held focus,
   /// plus a debounce timer used to restore focus if it is ever lost. Together
@@ -182,12 +190,11 @@ class _GameScreenState extends State<GameScreen>
     _ticker = createTicker(_onTick);
 
     if (kBallTrailShader) {
-      ui.FragmentProgram.fromAsset('shaders/ball_trail.frag').then(
-        (ui.FragmentProgram program) {
-          if (mounted) setState(() => _trailProgram = program);
-        },
-        onError: (Object _, StackTrace _) {},
-      );
+      ui.FragmentProgram.fromAsset('shaders/ball_trail.frag').then((
+        ui.FragmentProgram program,
+      ) {
+        if (mounted) setState(() => _trailProgram = program);
+      }, onError: (Object _, StackTrace _) {});
     }
   }
 
@@ -255,8 +262,10 @@ class _GameScreenState extends State<GameScreen>
   void _nudgePaddle(double delta) {
     if (_gameState != GameState.playing) return;
     if (_verticalMode) {
-      targetPaddleY = (targetPaddleY + delta)
-          .clamp(kPaddleClamp, _screenHeight - paddleWidth - kPaddleClamp);
+      targetPaddleY = (targetPaddleY + delta).clamp(
+        kPaddleClamp,
+        _screenHeight - paddleWidth - kPaddleClamp,
+      );
       paddleY = targetPaddleY;
       for (final ball in _balls) {
         if (ball.attached) {
@@ -264,8 +273,10 @@ class _GameScreenState extends State<GameScreen>
         }
       }
     } else {
-      targetPaddleX = (targetPaddleX + delta)
-          .clamp(kPaddleClamp, _screenWidth - paddleWidth - kPaddleClamp);
+      targetPaddleX = (targetPaddleX + delta).clamp(
+        kPaddleClamp,
+        _screenWidth - paddleWidth - kPaddleClamp,
+      );
       paddleX = targetPaddleX;
       for (final ball in _balls) {
         if (ball.attached) {
@@ -280,10 +291,16 @@ class _GameScreenState extends State<GameScreen>
   void _onCrownRotated(double delta) {
     if (_verticalMode) {
       targetPaddleY -= delta * 0.3;
-      targetPaddleY = targetPaddleY.clamp(kPaddleClamp, _screenHeight - paddleWidth - kPaddleClamp);
+      targetPaddleY = targetPaddleY.clamp(
+        kPaddleClamp,
+        _screenHeight - paddleWidth - kPaddleClamp,
+      );
     } else {
       targetPaddleX += delta * 0.3;
-      targetPaddleX = targetPaddleX.clamp(kPaddleClamp, _screenWidth - paddleWidth - kPaddleClamp);
+      targetPaddleX = targetPaddleX.clamp(
+        kPaddleClamp,
+        _screenWidth - paddleWidth - kPaddleClamp,
+      );
     }
   }
 
@@ -293,10 +310,11 @@ class _GameScreenState extends State<GameScreen>
     // Positive delta means rolling crown clockwise (up/away from user), which scrolls down.
     // Negative delta means rolling counter-clockwise, which scrolls up.
     // 0.45 coefficient scales rotation delta to smooth scrolling offset changes.
-    final double newOffset = (_levelSelectScrollController.offset + delta * 0.45).clamp(
-      0.0,
-      _levelSelectScrollController.position.maxScrollExtent,
-    );
+    final double newOffset =
+        (_levelSelectScrollController.offset + delta * 0.45).clamp(
+          0.0,
+          _levelSelectScrollController.position.maxScrollExtent,
+        );
     _levelSelectScrollController.jumpTo(newOffset);
   }
 
@@ -328,7 +346,8 @@ class _GameScreenState extends State<GameScreen>
   /// player just saw the ball hit.
   void _flareRingAt(double x, double y) {
     if (!kNeonPulseShader || _screenWidth <= 0 || _screenHeight <= 0) return;
-    final double px = ((x / _screenWidth) - 0.5) * (_screenWidth / _screenHeight);
+    final double px =
+        ((x / _screenWidth) - 0.5) * (_screenWidth / _screenHeight);
     final double py = (y / _screenHeight) - 0.5;
     final double a = (math.atan2(py, px) / (2 * math.pi)) + 1.0;
     _ringFlares.add(RingFlare(position: a % 1.0));
@@ -370,8 +389,8 @@ class _GameScreenState extends State<GameScreen>
   /// platform. Read once on first launch of this version and copied into
   /// NSUserDefaults; the file is left in place and never written again.
   File get _legacySaveFile => File(
-        '${Directory.systemTemp.parent.path}/Documents/crown_breaker_save.json',
-      );
+    '${Directory.systemTemp.parent.path}/Documents/crown_breaker_save.json',
+  );
 
   /// Reads the raw save JSON, or null if there is none.
   ///
@@ -409,11 +428,15 @@ class _GameScreenState extends State<GameScreen>
       final data = jsonDecode(contents) as Map<String, dynamic>;
       setState(() {
         _highScore = data['highScore'] as int? ?? 0;
-        _maxUnlockedLevel = (data['maxUnlockedLevel'] as int? ?? 0)
-            .clamp(0, _levels.length - 1);
+        _maxUnlockedLevel = (data['maxUnlockedLevel'] as int? ?? 0).clamp(
+          0,
+          _levels.length - 1,
+        );
         final starsData = data['levelStars'] as Map<String, dynamic>?;
         if (starsData != null) {
-          _levelStars = starsData.map((k, v) => MapEntry(int.parse(k), v as int));
+          _levelStars = starsData.map(
+            (k, v) => MapEntry(int.parse(k), v as int),
+          );
         }
       });
     } catch (_) {
@@ -428,11 +451,13 @@ class _GameScreenState extends State<GameScreen>
       });
     }
     try {
-      await _writeSaveString(jsonEncode({
-        'highScore': _highScore,
-        'maxUnlockedLevel': _maxUnlockedLevel,
-        'levelStars': _levelStars.map((k, v) => MapEntry(k.toString(), v)),
-      }));
+      await _writeSaveString(
+        jsonEncode({
+          'highScore': _highScore,
+          'maxUnlockedLevel': _maxUnlockedLevel,
+          'levelStars': _levelStars.map((k, v) => MapEntry(k.toString(), v)),
+        }),
+      );
     } catch (_) {
       // Silently ignore write errors.
     }
@@ -468,7 +493,8 @@ class _GameScreenState extends State<GameScreen>
       final cols = line.length;
       final double brickAreaWidth = _screenWidth - (kGameMargin * 2) - 8.0;
       final double bottomMargin = _verticalMode ? 24.0 : kGameMargin;
-      final double brickAreaHeight = _screenHeight - kBrickTopMargin - bottomMargin;
+      final double brickAreaHeight =
+          _screenHeight - kBrickTopMargin - bottomMargin;
       final brickWidth = _verticalMode
           ? (brickAreaHeight - (spacingY * (cols - 1))) / cols
           : (brickAreaWidth - (spacingX * (cols - 1))) / cols;
@@ -630,7 +656,8 @@ class _GameScreenState extends State<GameScreen>
     // "Real" focus is a leaf control the user can see. The root game node only
     // counts during gameplay — on a menu it is invisible, so focus resting on
     // it reads as lost and must be recovered like a null focus.
-    final bool hasRealFocus = primary != null &&
+    final bool hasRealFocus =
+        primary != null &&
         primary is! FocusScopeNode &&
         (primary != _gameFocusNode || _isGameplayFocusState);
     if (hasRealFocus) {
@@ -644,8 +671,10 @@ class _GameScreenState extends State<GameScreen>
       _restoreFocus();
     } else {
       _focusRestoreTimer?.cancel();
-      _focusRestoreTimer =
-          Timer(const Duration(milliseconds: 50), _restoreFocusIfLost);
+      _focusRestoreTimer = Timer(
+        const Duration(milliseconds: 50),
+        _restoreFocusIfLost,
+      );
     }
   }
 
@@ -815,8 +844,7 @@ class _GameScreenState extends State<GameScreen>
   /// paused on resume so play restarts on the player's terms.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed &&
-        _gameState == GameState.playing) {
+    if (state != AppLifecycleState.resumed && _gameState == GameState.playing) {
       _pauseGame();
     }
   }
@@ -844,7 +872,8 @@ class _GameScreenState extends State<GameScreen>
       _lastElapsed = elapsed;
       return;
     }
-    final double dt = (elapsed.inMicroseconds - _lastElapsed.inMicroseconds) / 1000000.0;
+    final double dt =
+        (elapsed.inMicroseconds - _lastElapsed.inMicroseconds) / 1000000.0;
     _lastElapsed = elapsed;
 
     if (_gameState != GameState.playing) return;
@@ -889,11 +918,13 @@ class _GameScreenState extends State<GameScreen>
     // 2.2 Smoothly interpolate paddle position towards target.
     if (_verticalMode) {
       if (paddleY != targetPaddleY) {
-        paddleY = paddleY + (targetPaddleY - paddleY) * (dt * 18.0).clamp(0.0, 1.0);
+        paddleY =
+            paddleY + (targetPaddleY - paddleY) * (dt * 18.0).clamp(0.0, 1.0);
       }
     } else {
       if (paddleX != targetPaddleX) {
-        paddleX = paddleX + (targetPaddleX - paddleX) * (dt * 18.0).clamp(0.0, 1.0);
+        paddleX =
+            paddleX + (targetPaddleX - paddleX) * (dt * 18.0).clamp(0.0, 1.0);
       }
     }
 
@@ -962,9 +993,15 @@ class _GameScreenState extends State<GameScreen>
         // Keep the docked ball locked to the paddle at its offset.
         if (_verticalMode) {
           ball.x = _paddleX - ball.radius;
-          ball.y = (paddleY + paddleWidth / 2 + ball.attachedOffset).clamp(paddleY, paddleY + paddleWidth);
+          ball.y = (paddleY + paddleWidth / 2 + ball.attachedOffset).clamp(
+            paddleY,
+            paddleY + paddleWidth,
+          );
         } else {
-          ball.x = (paddleX + paddleWidth / 2 + ball.attachedOffset).clamp(paddleX, paddleX + paddleWidth);
+          ball.x = (paddleX + paddleWidth / 2 + ball.attachedOffset).clamp(
+            paddleX,
+            paddleX + paddleWidth,
+          );
           ball.y = _paddleY - ball.radius;
         }
         continue;
@@ -984,13 +1021,33 @@ class _GameScreenState extends State<GameScreen>
 
       // Rounded-corner deflection, one quadrant at a time.
       if (ball.x < leftCornerBound && ball.y < topCornerBound) {
-        inCorner = _deflectCorner(ball, leftCornerBound, topCornerBound, cornerRadius);
+        inCorner = _deflectCorner(
+          ball,
+          leftCornerBound,
+          topCornerBound,
+          cornerRadius,
+        );
       } else if (ball.x > rightCornerBound && ball.y < topCornerBound) {
-        inCorner = _deflectCorner(ball, rightCornerBound, topCornerBound, cornerRadius);
+        inCorner = _deflectCorner(
+          ball,
+          rightCornerBound,
+          topCornerBound,
+          cornerRadius,
+        );
       } else if (ball.x < leftCornerBound && ball.y > bottomCornerBound) {
-        inCorner = _deflectCorner(ball, leftCornerBound, bottomCornerBound, cornerRadius);
+        inCorner = _deflectCorner(
+          ball,
+          leftCornerBound,
+          bottomCornerBound,
+          cornerRadius,
+        );
       } else if (ball.x > rightCornerBound && ball.y > bottomCornerBound) {
-        inCorner = _deflectCorner(ball, rightCornerBound, bottomCornerBound, cornerRadius);
+        inCorner = _deflectCorner(
+          ball,
+          rightCornerBound,
+          bottomCornerBound,
+          cornerRadius,
+        );
       }
 
       // Flat wall collisions when not inside a corner.
@@ -1071,13 +1128,15 @@ class _GameScreenState extends State<GameScreen>
 
       bool collidesWithPaddle = false;
       if (_verticalMode) {
-        collidesWithPaddle = ball.vx > 0 &&
+        collidesWithPaddle =
+            ball.vx > 0 &&
             ball.x + ball.radius >= paddleRect.left &&
             ball.x - ball.radius <= paddleRect.right &&
             ball.y + ball.radius >= paddleRect.top &&
             ball.y - ball.radius <= paddleRect.bottom;
       } else {
-        collidesWithPaddle = ball.vy > 0 &&
+        collidesWithPaddle =
+            ball.vy > 0 &&
             ball.y + ball.radius >= paddleRect.top &&
             ball.y - ball.radius <= paddleRect.bottom &&
             ball.x + ball.radius >= paddleRect.left &&
@@ -1088,7 +1147,10 @@ class _GameScreenState extends State<GameScreen>
         _sendHaptic("click");
         _screenShake = 2.0;
         // Gradually increase ball speed for tension.
-        ball.speed = (ball.speed + 2.0).clamp(_baseBallSpeed, math.max(_baseBallSpeed + 40.0, 220.0));
+        ball.speed = (ball.speed + 2.0).clamp(
+          _baseBallSpeed,
+          math.max(_baseBallSpeed + 40.0, 220.0),
+        );
         _comboCount = 0; // Reset combo on paddle hit.
 
         if (isStickyActive) {
@@ -1104,14 +1166,17 @@ class _GameScreenState extends State<GameScreen>
           ball.vy = 0;
           _sendHaptic("retry");
         } else {
+          // Exact, unlike a launch: where the ball strikes the paddle is how
+          // the player aims, so this must be repeatable. See [launchAngle].
+          const double maxAngle = kMaxLaunchAngleDeg * math.pi / 180.0;
           if (_verticalMode) {
             final hitPoint = (ball.y - paddleRect.top) / paddleRect.height;
-            final angle = (hitPoint - 0.5) * 2.0 * (math.pi / 3.0);
+            final angle = (hitPoint - 0.5) * 2.0 * maxAngle;
             ball.vx = -math.cos(angle);
             ball.vy = math.sin(angle);
           } else {
             final hitPoint = (ball.x - paddleRect.left) / paddleRect.width;
-            final angle = (hitPoint - 0.5) * 2.0 * (math.pi / 3.0);
+            final angle = (hitPoint - 0.5) * 2.0 * maxAngle;
             ball.vx = math.sin(angle);
             ball.vy = -math.cos(angle);
           }
@@ -1236,7 +1301,10 @@ class _GameScreenState extends State<GameScreen>
     if (!hasBreakableBricks && _gameState == GameState.playing) {
       _sendHaptic("success");
       if (_currentLevelIndex + 1 > _maxUnlockedLevel) {
-        _maxUnlockedLevel = (_currentLevelIndex + 1).clamp(0, _levels.length - 1);
+        _maxUnlockedLevel = (_currentLevelIndex + 1).clamp(
+          0,
+          _levels.length - 1,
+        );
       }
       final stars = _lives.clamp(1, 3);
       if (stars > (_levelStars[_currentLevelIndex] ?? 0)) {
@@ -1302,12 +1370,18 @@ class _GameScreenState extends State<GameScreen>
   /// Marks every brick adjacent (8-neighborhood) to a living 'S' generator as
   /// shielded. Called at level start and whenever a generator dies.
   void _recomputeShields() {
-    final generators = _bricks.where((b) => b.type == 'S' && b.lives > 0).toList();
+    final generators = _bricks
+        .where((b) => b.type == 'S' && b.lives > 0)
+        .toList();
     for (final brick in _bricks) {
-      brick.shielded = brick.type != 'S' &&
+      brick.shielded =
+          brick.type != 'S' &&
           brick.type != 'I' &&
-          generators.any((g) =>
-              (g.row - brick.row).abs() <= 1 && (g.col - brick.col).abs() <= 1);
+          generators.any(
+            (g) =>
+                (g.row - brick.row).abs() <= 1 &&
+                (g.col - brick.col).abs() <= 1,
+          );
     }
   }
 
@@ -1316,9 +1390,11 @@ class _GameScreenState extends State<GameScreen>
   void _explodeNeighbors(Brick source) {
     _screenShake = math.max(_screenShake, 4.0);
     final neighbors = _bricks
-        .where((b) =>
-            b != source &&
-            ((b.row - source.row).abs() + (b.col - source.col).abs()) == 1)
+        .where(
+          (b) =>
+              b != source &&
+              ((b.row - source.row).abs() + (b.col - source.col).abs()) == 1,
+        )
         .toList();
     for (final n in neighbors) {
       _damageBrick(n, n.rect.center.dx, n.rect.center.dy);
@@ -1327,7 +1403,8 @@ class _GameScreenState extends State<GameScreen>
 
   // Damage or destroy a brick and award score, particles, and power-ups.
   void _damageBrick(Brick brick, double hitX, double hitY) {
-    if (brick.type == 'I' || brick.lives <= 0) return; // Indestructible or gone.
+    // Indestructible or gone.
+    if (brick.type == 'I' || brick.lives <= 0) return;
     if (brick.shielded) {
       // A generator protects this brick — ping off it, no damage.
       _spawnExplosion(hitX, hitY, Colors.white70, count: 3);
@@ -1343,10 +1420,21 @@ class _GameScreenState extends State<GameScreen>
       setState(() {
         _score += pts;
       });
-      _floatingScores.add(FloatingScore(x: brick.rect.center.dx, y: brick.rect.center.dy, score: pts, life: 1.0));
+      _floatingScores.add(
+        FloatingScore(
+          x: brick.rect.center.dx,
+          y: brick.rect.center.dy,
+          score: pts,
+          life: 1.0,
+        ),
+      );
       _flareRingAt(brick.rect.center.dx, brick.rect.center.dy);
-      _spawnExplosion(brick.rect.center.dx, brick.rect.center.dy, brick.baseColor,
-          count: brick.type == 'E' ? 20 : 12);
+      _spawnExplosion(
+        brick.rect.center.dx,
+        brick.rect.center.dy,
+        brick.baseColor,
+        count: brick.type == 'E' ? 20 : 12,
+      );
 
       if (brick.type == 'E') _explodeNeighbors(brick);
       if (brick.type == 'S') _recomputeShields();
@@ -1359,13 +1447,23 @@ class _GameScreenState extends State<GameScreen>
       final progress = (brick.maxLives - brick.lives) / brick.maxLives;
       brick.currentColor = brick.type == 'A'
           ? _levels[_currentLevelIndex].themeColor
-          : Color.lerp(brick.baseColor, _levels[_currentLevelIndex].themeColor,
-              progress)!;
+          : Color.lerp(
+              brick.baseColor,
+              _levels[_currentLevelIndex].themeColor,
+              progress,
+            )!;
       final pts = 50 * comboMult;
       setState(() {
         _score += pts;
       });
-      _floatingScores.add(FloatingScore(x: brick.rect.center.dx, y: brick.rect.center.dy, score: pts, life: 1.0));
+      _floatingScores.add(
+        FloatingScore(
+          x: brick.rect.center.dx,
+          y: brick.rect.center.dy,
+          score: pts,
+          life: 1.0,
+        ),
+      );
       _spawnExplosion(hitX, hitY, brick.baseColor, count: 4);
     }
   }
@@ -1474,11 +1572,29 @@ class _GameScreenState extends State<GameScreen>
     if (!isLaserActive || _gameState != GameState.playing) return;
     _sendHaptic("click");
     if (_verticalMode) {
-      _lasers.add(Laser(x: _paddleX - 2.0, y: paddleY + 4.0, vx: -4.0, vy: 0.0));
-      _lasers.add(Laser(x: _paddleX - 2.0, y: paddleY + paddleWidth - 4.0, vx: -4.0, vy: 0.0));
+      _lasers.add(
+        Laser(x: _paddleX - 2.0, y: paddleY + 4.0, vx: -4.0, vy: 0.0),
+      );
+      _lasers.add(
+        Laser(
+          x: _paddleX - 2.0,
+          y: paddleY + paddleWidth - 4.0,
+          vx: -4.0,
+          vy: 0.0,
+        ),
+      );
     } else {
-      _lasers.add(Laser(x: paddleX + 4.0, y: _paddleY - 2.0, vx: 0.0, vy: -4.0));
-      _lasers.add(Laser(x: paddleX + paddleWidth - 4.0, y: _paddleY - 2.0, vx: 0.0, vy: -4.0));
+      _lasers.add(
+        Laser(x: paddleX + 4.0, y: _paddleY - 2.0, vx: 0.0, vy: -4.0),
+      );
+      _lasers.add(
+        Laser(
+          x: paddleX + paddleWidth - 4.0,
+          y: _paddleY - 2.0,
+          vx: 0.0,
+          vy: -4.0,
+        ),
+      );
     }
   }
 
@@ -1492,13 +1608,17 @@ class _GameScreenState extends State<GameScreen>
             if (ball.attached) {
               ball.attached = false;
               if (_verticalMode) {
-                final hitPoint = (ball.y - paddleY) / paddleWidth;
-                final angle = (hitPoint - 0.5) * 2.0 * (math.pi / 3.0);
+                final angle = launchAngle(
+                  (ball.y - paddleY) / paddleWidth,
+                  _random,
+                );
                 ball.vx = -math.cos(angle);
                 ball.vy = math.sin(angle);
               } else {
-                final hitPoint = (ball.x - paddleX) / paddleWidth;
-                final angle = (hitPoint - 0.5) * 2.0 * (math.pi / 3.0);
+                final angle = launchAngle(
+                  (ball.x - paddleX) / paddleWidth,
+                  _random,
+                );
                 ball.vx = math.sin(angle);
                 ball.vy = -math.cos(angle);
               }
@@ -1516,206 +1636,251 @@ class _GameScreenState extends State<GameScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        // Apple TV reports a large overscan safe area; honoring it letterboxes
-        // the scene inside the dark scaffold background so the app looks
-        // windowed. The HUD already lives inside the title-safe region of the
-        // logical viewport, so render full-bleed on tvOS for true fullscreen.
-        left: !_isTv,
-        top: !_isTv,
-        right: !_isTv,
-        bottom: !_isTv,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // On TV the simulation runs in a fixed logical viewport
-            // (kTvLogicalHeight tall, same aspect as the panel) and the whole
-            // scene — canvas, HUD, menus — is scaled up by FittedBox below.
-            // Elsewhere the viewport is simply the physical screen.
-            final double tvScale =
-                _isTv ? constraints.maxHeight / kTvLogicalHeight : 1.0;
-            final double viewWidth = constraints.maxWidth / tvScale;
-            final double viewHeight = constraints.maxHeight / tvScale;
+      // No SafeArea, on either screen. Apple TV reports a large overscan inset
+      // and watchOS reports ~40pt at the top for the time — honoring either one
+      // letterboxes the scene inside the dark scaffold background, so the game
+      // looks windowed and loses a fifth of the watch's display to a status bar
+      // it already hides. Both screens are rendered full-bleed and the game
+      // handles the edges itself: the TV HUD sits inside the title-safe region
+      // of the logical viewport, and on the watch every corner-adjacent element
+      // is placed against the display's real curve via [ScreenMetrics].
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // The simulation runs in a fixed logical viewport — kStageHeight tall
+          // on a watch, kTvLogicalHeight on a TV, in both cases sharing the
+          // panel's aspect ratio — and the whole scene (canvas, HUD, menus) is
+          // scaled to the panel by the FittedBox below. That is what makes one
+          // set of tuned numbers hold from a 40mm wrist to a 4K living room.
+          final ScreenMetrics metrics = ScreenMetrics.forPanel(
+            Size(constraints.maxWidth, constraints.maxHeight),
+            isTv: _isTv,
+          );
+          final double viewWidth = metrics.stage.width;
+          final double viewHeight = metrics.stage.height;
 
-            // Capture the (logical) viewport size on first layout / resize.
-            if (_screenWidth != viewWidth || _screenHeight != viewHeight) {
-              _screenWidth = viewWidth;
-              _screenHeight = viewHeight;
-              if (_gameState == GameState.playing && ballAttachedToPaddle && _balls.isNotEmpty) {
-                if (_verticalMode) {
-                  targetPaddleY = (_screenHeight - paddleWidth) / 2;
-                  paddleY = targetPaddleY;
-                } else {
-                  targetPaddleX = (_screenWidth - paddleWidth) / 2;
-                  paddleX = targetPaddleX;
-                }
-                for (final ball in _balls) {
-                  if (ball.attached) {
-                    if (_verticalMode) {
-                      ball.x = _paddleX - ball.radius;
-                      ball.y = paddleY + paddleWidth / 2 + ball.attachedOffset;
-                    } else {
-                      ball.x = paddleX + paddleWidth / 2 + ball.attachedOffset;
-                      ball.y = _paddleY - ball.radius;
-                    }
+          _metrics = metrics;
+
+          // Capture the (logical) viewport size on first layout / resize.
+          if (_screenWidth != viewWidth || _screenHeight != viewHeight) {
+            _screenWidth = viewWidth;
+            _screenHeight = viewHeight;
+            if (_gameState == GameState.playing &&
+                ballAttachedToPaddle &&
+                _balls.isNotEmpty) {
+              if (_verticalMode) {
+                targetPaddleY = (_screenHeight - paddleWidth) / 2;
+                paddleY = targetPaddleY;
+              } else {
+                targetPaddleX = (_screenWidth - paddleWidth) / 2;
+                paddleX = targetPaddleX;
+              }
+              for (final ball in _balls) {
+                if (ball.attached) {
+                  if (_verticalMode) {
+                    ball.x = _paddleX - ball.radius;
+                    ball.y = paddleY + paddleWidth / 2 + ball.attachedOffset;
+                  } else {
+                    ball.x = paddleX + paddleWidth / 2 + ball.attachedOffset;
+                    ball.y = _paddleY - ball.radius;
                   }
                 }
               }
             }
+          }
 
-            return Focus(
-              focusNode: _gameFocusNode,
-              // Gameplay keys are handled globally via HardwareKeyboard
-              // (see [_onHardwareKey]); this node just anchors gameplay focus.
-              // SizedBox.expand forces the FittedBox to the full screen —
-              // under Center's loose constraints it would shrink-wrap the
-              // logical viewport and render unscaled.
-              child: SizedBox.expand(
-                child: FittedBox(
-                  // Logical viewport and panel share an aspect ratio, so fill
-                  // == uniform scale (no distortion, no letterbox). A no-op
-                  // off-TV where the child already matches the constraints.
-                  fit: BoxFit.fill,
-                  child: SizedBox(
-                    width: _screenWidth,
-                    height: _screenHeight,
-                    child: ColoredBox(
-                      color: levelBackgroundColor(_currentLevelIndex + 1),
-                      child: NeonPulse(
+          return Focus(
+            focusNode: _gameFocusNode,
+            // Gameplay keys are handled globally via HardwareKeyboard
+            // (see [_onHardwareKey]); this node just anchors gameplay focus.
+            // SizedBox.expand forces the FittedBox to the full screen —
+            // under Center's loose constraints it would shrink-wrap the
+            // logical viewport and render unscaled.
+            child: SizedBox.expand(
+              child: FittedBox(
+                // Logical viewport and panel share an aspect ratio, so fill
+                // == uniform scale (no distortion, no letterbox).
+                fit: BoxFit.fill,
+                child: SizedBox(
+                  width: _screenWidth,
+                  height: _screenHeight,
+                  child: ColoredBox(
+                    color: levelBackgroundColor(_currentLevelIndex + 1),
+                    child: NeonPulse(
                       accent: _levels[_currentLevelIndex].themeColor,
                       enabled: kNeonPulseShader,
                       flares: _ringFlares,
                       danger: _ringDanger,
                       threat: _ringThreat,
+                      // Concentric with the display's own corner, so the ring
+                      // keeps the same distance from the bezel on every watch.
+                      cornerRadius: metrics.borderRadius,
+                      // The watch shades the ring at half resolution because
+                      // its shader runs on the CPU; the TV has a GPU and a 4K
+                      // panel, where that same trade would only look stepped.
+                      resolution: _isTv
+                          ? kTvRingResolution
+                          : kWatchRingResolution,
                       // The paddle guards the bottom, or the right-hand side
                       // in vertical mode; that is the edge the ring marks as
                       // the one you lose through.
                       perilAxis: _verticalMode
                           ? const Offset(1, 0)
                           : const Offset(0, 1),
-                  child: Stack(
-                    children: [
-                      // Interactive playfield canvas.
-                      if (_gameState == GameState.playing ||
-                          _gameState == GameState.paused ||
-                          _gameState == GameState.levelIntro)
-                        GestureDetector(
-                          onTap: _onScreenTapped,
-                          onPanUpdate: (details) {
-                            if (_gameState != GameState.playing) return;
-                            if (_verticalMode) {
-                              targetPaddleY += details.delta.dy;
-                              targetPaddleY = targetPaddleY.clamp(kPaddleClamp, _screenHeight - paddleWidth - kPaddleClamp);
-                              paddleY = targetPaddleY;
-                              for (final ball in _balls) {
-                                if (ball.attached) {
-                                  ball.y = paddleY + paddleWidth / 2 + ball.attachedOffset;
+                      child: Stack(
+                        children: [
+                          // Interactive playfield canvas.
+                          if (_gameState == GameState.playing ||
+                              _gameState == GameState.paused ||
+                              _gameState == GameState.levelIntro)
+                            GestureDetector(
+                              onTap: _onScreenTapped,
+                              onPanUpdate: (details) {
+                                if (_gameState != GameState.playing) return;
+                                if (_verticalMode) {
+                                  targetPaddleY += details.delta.dy;
+                                  targetPaddleY = targetPaddleY.clamp(
+                                    kPaddleClamp,
+                                    _screenHeight - paddleWidth - kPaddleClamp,
+                                  );
+                                  paddleY = targetPaddleY;
+                                  for (final ball in _balls) {
+                                    if (ball.attached) {
+                                      ball.y =
+                                          paddleY +
+                                          paddleWidth / 2 +
+                                          ball.attachedOffset;
+                                    }
+                                  }
+                                } else {
+                                  targetPaddleX += details.delta.dx;
+                                  targetPaddleX = targetPaddleX.clamp(
+                                    kPaddleClamp,
+                                    _screenWidth - paddleWidth - kPaddleClamp,
+                                  );
+                                  paddleX =
+                                      targetPaddleX; // Instant touch response.
+                                  for (final ball in _balls) {
+                                    if (ball.attached) {
+                                      ball.x =
+                                          paddleX +
+                                          paddleWidth / 2 +
+                                          ball.attachedOffset;
+                                    }
+                                  }
                                 }
-                              }
-                            } else {
-                              targetPaddleX += details.delta.dx;
-                              targetPaddleX = targetPaddleX.clamp(kPaddleClamp, _screenWidth - paddleWidth - kPaddleClamp);
-                              paddleX = targetPaddleX; // Instant touch response.
-                              for (final ball in _balls) {
-                                if (ball.attached) {
-                                  ball.x = paddleX + paddleWidth / 2 + ball.attachedOffset;
-                                }
-                              }
-                            }
-                            _repaintNotifier.repaint();
-                          },
-                          child: RepaintBoundary(
-                            child: CustomPaint(
-                              size: Size(_screenWidth, _screenHeight),
-                              painter: _GamePainter(state: this, repaint: _repaintNotifier),
+                                _repaintNotifier.repaint();
+                              },
+                              child: RepaintBoundary(
+                                child: CustomPaint(
+                                  size: Size(_screenWidth, _screenHeight),
+                                  painter: _GamePainter(
+                                    state: this,
+                                    repaint: _repaintNotifier,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
 
-                      // State-specific overlays.
-                      if (_gameState == GameState.menu)
-                        MenuView(
-                          highScore: _highScore,
-                          verticalMode: _verticalMode,
-                          // TV is always landscape; hide the orientation toggle.
-                          showModeToggle: !_isTv,
-                          onPlay: () {
-                            _sendHaptic("click");
-                            setState(() => _gameState = GameState.levelSelect);
-                          },
-                          onToggleMode: () {
-                            _sendHaptic("click");
-                            setState(() => _verticalMode = !_verticalMode);
-                          },
-                        ),
-                      if (_gameState == GameState.levelSelect)
-                        LevelSelectView(
-                          levels: _levels,
-                          maxUnlockedLevel: _maxUnlockedLevel,
-                          levelStars: _levelStars,
-                          controller: _levelSelectScrollController,
-                          // tvOS has no pointer; the Menu button handles back.
-                          showBackButton: !_isTv,
-                          onSelect: (index) => _enterLevel(index),
-                          onBack: () {
-                            _sendHaptic("click");
-                            setState(() => _gameState = GameState.menu);
-                          },
-                        ),
-                      if (_gameState == GameState.levelIntro)
-                        LevelIntroView(
-                          levelIndex: _currentLevelIndex,
-                          level: _levels[_currentLevelIndex],
-                        ),
-                      if (_gameState == GameState.playing || _gameState == GameState.paused)
-                        PlayingHud(
-                          levelIndex: _currentLevelIndex,
-                          themeColor: _levels[_currentLevelIndex].themeColor,
-                          lives: _lives,
-                          score: _score,
-                          comboCount: _comboCount,
-                          showLaunchHint: ballAttachedToPaddle,
-                          showLaserHint: isLaserActive && !ballAttachedToPaddle,
-                          isTv: _isTv,
-                          onPause: _pauseGame,
-                        ),
-                      if (_gameState == GameState.paused)
-                        PausedView(
-                          onResume: _resumeGame,
-                          onQuit: () {
-                            _sendHaptic("stop");
-                            setState(() => _gameState = GameState.levelSelect);
-                          },
-                        ),
-                      if (_gameState == GameState.gameOver)
-                        GameOverView(
-                          score: _score,
-                          onRetry: () => _enterLevel(_currentLevelIndex, haptic: "retry"),
-                          onMenu: () {
-                            _sendHaptic("click");
-                            setState(() => _gameState = GameState.levelSelect);
-                          },
-                        ),
-                      if (_gameState == GameState.gameWon)
-                        GameWonView(
-                          score: _score,
-                          lives: _lives,
-                          hasNextLevel: _currentLevelIndex < _levels.length - 1,
-                          onNext: () => _enterLevel(_currentLevelIndex + 1),
-                          onMenu: () {
-                            _sendHaptic("click");
-                            setState(() => _gameState = GameState.levelSelect);
-                          },
-                        ),
+                          // State-specific overlays.
+                          if (_gameState == GameState.menu)
+                            MenuView(
+                              highScore: _highScore,
+                              verticalMode: _verticalMode,
+                              // TV is always landscape; hide the orientation toggle.
+                              showModeToggle: !_isTv,
+                              onPlay: () {
+                                _sendHaptic("click");
+                                setState(
+                                  () => _gameState = GameState.levelSelect,
+                                );
+                              },
+                              onToggleMode: () {
+                                _sendHaptic("click");
+                                setState(() => _verticalMode = !_verticalMode);
+                              },
+                            ),
+                          if (_gameState == GameState.levelSelect)
+                            LevelSelectView(
+                              levels: _levels,
+                              maxUnlockedLevel: _maxUnlockedLevel,
+                              levelStars: _levelStars,
+                              controller: _levelSelectScrollController,
+                              // tvOS has no pointer; the Menu button handles back.
+                              showBackButton: !_isTv,
+                              onSelect: (index) => _enterLevel(index),
+                              onBack: () {
+                                _sendHaptic("click");
+                                setState(() => _gameState = GameState.menu);
+                              },
+                            ),
+                          if (_gameState == GameState.levelIntro)
+                            LevelIntroView(
+                              levelIndex: _currentLevelIndex,
+                              level: _levels[_currentLevelIndex],
+                            ),
+                          if (_gameState == GameState.playing ||
+                              _gameState == GameState.paused)
+                            PlayingHud(
+                              levelIndex: _currentLevelIndex,
+                              themeColor:
+                                  _levels[_currentLevelIndex].themeColor,
+                              lives: _lives,
+                              score: _score,
+                              comboCount: _comboCount,
+                              showLaunchHint: ballAttachedToPaddle,
+                              showLaserHint:
+                                  isLaserActive && !ballAttachedToPaddle,
+                              metrics: metrics,
+                              isTv: _isTv,
+                              onPause: _pauseGame,
+                            ),
+                          if (_gameState == GameState.paused)
+                            PausedView(
+                              onResume: _resumeGame,
+                              onQuit: () {
+                                _sendHaptic("stop");
+                                setState(
+                                  () => _gameState = GameState.levelSelect,
+                                );
+                              },
+                            ),
+                          if (_gameState == GameState.gameOver)
+                            GameOverView(
+                              score: _score,
+                              onRetry: () => _enterLevel(
+                                _currentLevelIndex,
+                                haptic: "retry",
+                              ),
+                              onMenu: () {
+                                _sendHaptic("click");
+                                setState(
+                                  () => _gameState = GameState.levelSelect,
+                                );
+                              },
+                            ),
+                          if (_gameState == GameState.gameWon)
+                            GameWonView(
+                              score: _score,
+                              lives: _lives,
+                              hasNextLevel:
+                                  _currentLevelIndex < _levels.length - 1,
+                              onNext: () => _enterLevel(_currentLevelIndex + 1),
+                              onMenu: () {
+                                _sendHaptic("click");
+                                setState(
+                                  () => _gameState = GameState.levelSelect,
+                                );
+                              },
+                            ),
                         ],
                       ),
-                    ),
                     ),
                   ),
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1723,6 +1888,29 @@ class _GameScreenState extends State<GameScreen>
 
 /// Renders the entire playfield each frame. Reads [state] directly to avoid
 /// per-frame allocations; all [Paint] objects are cached.
+/// The angle a docked ball leaves the paddle at, in radians from straight-on.
+///
+/// The paddle's [hitPoint] (0 at one end, 1 at the other) maps across the full
+/// [kMaxLaunchAngleDeg] range, and a jitter of [kLaunchJitterMinDeg] to
+/// [kLaunchJitterMaxDeg] degrees is added so a launch is never exactly
+/// repeatable — see the constants for why a docked ball would otherwise leave
+/// on precisely the same line every time.
+///
+/// Clamped back into the same range, so the jitter can only move a launch
+/// around inside the envelope the paddle already produces, never past it.
+double launchAngle(double hitPoint, math.Random random) {
+  const double maxAngle = kMaxLaunchAngleDeg * math.pi / 180.0;
+  final double magnitude =
+      kLaunchJitterMinDeg +
+      random.nextDouble() * (kLaunchJitterMaxDeg - kLaunchJitterMinDeg);
+  final double jitter =
+      magnitude * (random.nextBool() ? 1.0 : -1.0) * math.pi / 180.0;
+  return ((hitPoint - 0.5) * 2.0 * maxAngle + jitter).clamp(
+    -maxAngle,
+    maxAngle,
+  );
+}
+
 /// A comet wedge: a triangle with its base across the ball at [head] and its
 /// apex [length] behind, opposite [dir] (which must be unit length).
 ///
@@ -1781,8 +1969,7 @@ class _GamePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
       ..maskFilter = null;
-    final borderRect = Rect.fromLTWH(kGameMargin, kGameMargin, size.width - 2 * kGameMargin, size.height - 2 * kGameMargin);
-    final borderRRect = RRect.fromRectAndRadius(borderRect, const Radius.circular(kGameCornerRadius));
+    final RRect borderRRect = state._metrics.playfield;
     canvas.drawRRect(borderRRect, _borderPaint);
 
     // 1. Bricks.
@@ -1793,11 +1980,15 @@ class _GamePainter extends CustomPainter {
 
       _fillPaint
         ..color = brick.currentColor.withValues(
-            alpha: brick.currentColor.a * ghostAlpha)
+          alpha: brick.currentColor.a * ghostAlpha,
+        )
         ..style = PaintingStyle.fill
         ..maskFilter = null;
 
-      final RRect rrect = RRect.fromRectAndRadius(brick.rect, const Radius.circular(2.5));
+      final RRect rrect = RRect.fromRectAndRadius(
+        brick.rect,
+        const Radius.circular(2.5),
+      );
       canvas.drawRRect(rrect, _fillPaint);
 
       _strokePaint
@@ -1813,7 +2004,9 @@ class _GamePainter extends CustomPainter {
       if (brick.type == 'S') {
         final pulse = 0.5 + 0.5 * math.sin(state._levelTime * 4.0);
         _strokePaint
-          ..color = const Color(0xFFF5E6A8).withValues(alpha: 0.35 + 0.3 * pulse)
+          ..color = const Color(
+            0xFFF5E6A8,
+          ).withValues(alpha: 0.35 + 0.3 * pulse)
           ..strokeWidth = 1.5
           ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 3.0);
         canvas.drawRRect(rrect.inflate(1.5), _strokePaint);
@@ -1827,17 +2020,27 @@ class _GamePainter extends CustomPainter {
 
       // Explosive core dot.
       if (brick.type == 'E') {
-        _fillPaint..color = Colors.yellowAccent..style = PaintingStyle.fill;
+        _fillPaint
+          ..color = Colors.yellowAccent
+          ..style = PaintingStyle.fill;
         canvas.drawCircle(brick.rect.center, 1.6, _fillPaint);
       }
 
       // Heavy bricks carry two rivet notches; they brighten as they crack.
       if (brick.type == 'H') {
-        _fillPaint..color = Colors.white38..style = PaintingStyle.fill;
+        _fillPaint
+          ..color = Colors.white38
+          ..style = PaintingStyle.fill;
         canvas.drawCircle(
-            Offset(brick.rect.left + 3, brick.rect.center.dy), 0.9, _fillPaint);
+          Offset(brick.rect.left + 3, brick.rect.center.dy),
+          0.9,
+          _fillPaint,
+        );
         canvas.drawCircle(
-            Offset(brick.rect.right - 3, brick.rect.center.dy), 0.9, _fillPaint);
+          Offset(brick.rect.right - 3, brick.rect.center.dy),
+          0.9,
+          _fillPaint,
+        );
       }
 
       // Crack overlay for damaged armored bricks.
@@ -1883,9 +2086,22 @@ class _GamePainter extends CustomPainter {
 
     // 3. Paddle.
     final paddleRect = state._verticalMode
-        ? Rect.fromLTWH(state.actualPaddleX, state.actualPaddleY, state.paddleHeight, state.paddleWidth)
-        : Rect.fromLTWH(state.actualPaddleX, state.actualPaddleY, state.paddleWidth, state.paddleHeight);
-    final paddleRRect = RRect.fromRectAndRadius(paddleRect, const Radius.circular(4));
+        ? Rect.fromLTWH(
+            state.actualPaddleX,
+            state.actualPaddleY,
+            state.paddleHeight,
+            state.paddleWidth,
+          )
+        : Rect.fromLTWH(
+            state.actualPaddleX,
+            state.actualPaddleY,
+            state.paddleWidth,
+            state.paddleHeight,
+          );
+    final paddleRRect = RRect.fromRectAndRadius(
+      paddleRect,
+      const Radius.circular(4),
+    );
 
     _paddlePaint
       ..color = themeColor
@@ -1917,8 +2133,7 @@ class _GamePainter extends CustomPainter {
 
         // A faster ball drags a longer tail — the streak reads as speed
         // rather than as a fixed decoration.
-        final double pace =
-            (ball.speed / state._baseBallSpeed).clamp(0.6, 1.8);
+        final double pace = (ball.speed / state._baseBallSpeed).clamp(0.6, 1.8);
         final double length = ball.radius * 10.0 * pace;
         final Offset head = Offset(ball.x, ball.y);
         final Offset dir = Offset(ball.vx, ball.vy) / speed;
@@ -1976,22 +2191,36 @@ class _GamePainter extends CustomPainter {
         ..color = const Color(0xFF0A0A1F)
         ..style = PaintingStyle.fill
         ..maskFilter = null;
-      canvas.drawCircle(Offset(pu.x, pu.y), pu.radius - 2.0, _powerUpInnerPaint);
+      canvas.drawCircle(
+        Offset(pu.x, pu.y),
+        pu.radius - 2.0,
+        _powerUpInnerPaint,
+      );
 
       final textSpan = TextSpan(
-        style: TextStyle(color: pu.color, fontSize: 8.5, fontWeight: FontWeight.w900),
+        style: TextStyle(
+          color: pu.color,
+          fontSize: 8.5,
+          fontWeight: FontWeight.w900,
+        ),
         text: pu.type == 'multiball'
             ? '3'
             : pu.type == 'expand'
-                ? '+'
-                : pu.type == 'shield'
-                    ? 'S'
-                    : pu.type == 'sticky'
-                        ? 'K'
-                        : 'L',
+            ? '+'
+            : pu.type == 'shield'
+            ? 'S'
+            : pu.type == 'sticky'
+            ? 'K'
+            : 'L',
       );
-      final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
-      textPainter.paint(canvas, Offset(pu.x - textPainter.width / 2, pu.y - textPainter.height / 2));
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      textPainter.paint(
+        canvas,
+        Offset(pu.x - textPainter.width / 2, pu.y - textPainter.height / 2),
+      );
     }
 
     // 6. Lasers.
@@ -2001,9 +2230,25 @@ class _GamePainter extends CustomPainter {
         ..style = PaintingStyle.fill
         ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 2.0);
       if (state._verticalMode) {
-        canvas.drawRect(Rect.fromLTWH(laser.x, laser.y - laser.width / 2, laser.height, laser.width), _laserPaint);
+        canvas.drawRect(
+          Rect.fromLTWH(
+            laser.x,
+            laser.y - laser.width / 2,
+            laser.height,
+            laser.width,
+          ),
+          _laserPaint,
+        );
       } else {
-        canvas.drawRect(Rect.fromLTWH(laser.x - laser.width / 2, laser.y, laser.width, laser.height), _laserPaint);
+        canvas.drawRect(
+          Rect.fromLTWH(
+            laser.x - laser.width / 2,
+            laser.y,
+            laser.width,
+            laser.height,
+          ),
+          _laserPaint,
+        );
       }
     }
 
@@ -2013,7 +2258,11 @@ class _GamePainter extends CustomPainter {
         ..color = particle.color.withValues(alpha: particle.life)
         ..style = PaintingStyle.fill
         ..maskFilter = null;
-      canvas.drawCircle(Offset(particle.x, particle.y), particle.size * particle.life, _particlePaint);
+      canvas.drawCircle(
+        Offset(particle.x, particle.y),
+        particle.size * particle.life,
+        _particlePaint,
+      );
     }
 
     // 8. Floating scores.
@@ -2026,7 +2275,10 @@ class _GamePainter extends CustomPainter {
         ),
         text: "+${fs.score}",
       );
-      final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
       textPainter.paint(canvas, Offset(fs.x - textPainter.width / 2, fs.y));
     }
   }

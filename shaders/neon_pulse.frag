@@ -40,6 +40,9 @@ uniform vec2 uPerilDir;     // 16,17  — picks the edge that costs a life: (0,1
                             //          vertical mode where it guards the right
 uniform vec3 uHot;          // 18,19,20 — the losing edge's hue for this frame
 uniform float uHazardPhase; // 21     — hazard-bar phase (time * rate)
+uniform float uGuardFrac;   // 22     — how far in from each end of the losing
+                            //          edge the paddle can actually travel, as
+                            //          a fraction of that edge's run
 
 out vec4 fragColor;
 
@@ -64,27 +67,48 @@ void main() {
   float a = fract(atan(p.y, p.x) / TAU + 1.0);
 
   // How much this pixel belongs to the edge that costs a life. The dot picks
-  // out uv.y or uv.x, so one expression covers both paddle orientations. The
-  // ramp is deliberately wide: it climbs the two side rails toward the open
-  // edge instead of stopping dead at the corners, so the border reads as a
-  // gradient into danger rather than as three walls and a stripe.
+  // out uv.y or uv.x, so one expression covers both paddle orientations.
   float peril = smoothstep(0.62, 0.90, dot(uv, uPerilDir));
+
+  // ...but only across the stretch the paddle can actually reach. The marking
+  // answers "where do you have to be", so it has to agree with where the paddle
+  // is allowed to go — no shorter, or it stops before the paddle does and the
+  // last stretch of travel looks safe; no longer, or it points at ends the
+  // player cannot cover. Swapping uPerilDir's components gives the coordinate
+  // that runs *along* the losing edge rather than across it, so this stays one
+  // expression for both orientations.
+  //
+  // It is full strength exactly at the paddle's limit and tapers out over the
+  // short run past it, which is why the band laps a little onto the corner
+  // curve — so does the paddle.
+  float along = dot(uv, vec2(uPerilDir.y, uPerilDir.x));
+  float fromEnd = min(along, 1.0 - along);
+  peril *= smoothstep(uGuardFrac * 0.55, uGuardFrac, fromEnd);
 
   // Hue is reserved for one question: which edge can kill you. The three solid
   // rails keep the world's accent no matter how bad things get, and only the
   // open edge runs warm — amber at rest, red as the situation deteriorates.
   vec3 accent = mix(uAccent, uHot, peril);
 
-  // Chunky travelling segments — about ten around the perimeter. Obvious
-  // per-pixel structure at any distance, and the part that could not be done
-  // with a gradient.
-  float bands = 0.75 + 0.25 * sin(a * 60.0 - uBandPhase);
+  // Chunky travelling segments — ten around the perimeter. Obvious per-pixel
+  // structure at any distance, and the part that could not be done with a
+  // gradient.
+  //
+  // The count must be a whole number of TAU, because `a` wraps 1 -> 0 at the
+  // middle of the right-hand rail and the pattern has to meet itself there. The
+  // old `a * 60.0` was 9.55 cycles, so the phase jumped ~198 degrees across the
+  // seam and left a hard line down the ring at that one spot.
+  float bands = 0.75 + 0.25 * sin(a * TAU * 10.0 - uBandPhase);
 
   // The open edge gets its own pattern: tighter, near-square hazard bars that
   // run faster under pressure. Structure as well as hue, so the edge is still
   // marked for a colour-blind player or a washed-out projector.
+  //
+  // Eighteen cycles for the same seam reason as the bands above, and because 18
+  // is the whole number nearest the 17.5 the old `a * 110.0` worked out to, so
+  // the bars keep their pitch.
   float hazard =
-      smoothstep(0.35, 0.65, 0.5 + 0.5 * sin(a * 110.0 - uHazardPhase));
+      smoothstep(0.35, 0.65, 0.5 + 0.5 * sin(a * TAU * 18.0 - uHazardPhase));
   float pattern = mix(bands, 0.55 + 0.75 * hazard, peril);
 
   float glow = 1.15 * pattern * uBreathe;

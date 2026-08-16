@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../screen_metrics.dart';
 import 'neon_button.dart';
 
 /// Brief "LEVEL N — name" splash shown before play begins.
@@ -8,7 +9,11 @@ class LevelIntroView extends StatelessWidget {
   final int levelIndex;
   final LevelData level;
 
-  const LevelIntroView({super.key, required this.levelIndex, required this.level});
+  const LevelIntroView({
+    super.key,
+    required this.levelIndex,
+    required this.level,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +61,10 @@ class PlayingHud extends StatelessWidget {
   final bool showLaunchHint;
   final bool showLaserHint;
 
+  /// The screen's real geometry. The HUD is the part of the game that lives in
+  /// the corners, so it is the part that has to know where the glass stops.
+  final ScreenMetrics metrics;
+
   /// On Apple TV the pause circle is hidden (there is no pointer to tap it);
   /// the Siri Remote Menu / Play-Pause buttons pause instead, and the hints
   /// speak remote language ("PRESS" rather than "TAP").
@@ -71,18 +80,41 @@ class PlayingHud extends StatelessWidget {
     required this.comboCount,
     required this.showLaunchHint,
     required this.showLaserHint,
+    required this.metrics,
     this.isTv = false,
     required this.onPause,
   });
 
+  /// Top edge of the pause circle, and of the stats row below it. Both are
+  /// measured from the top of the stage, which is also where the display's
+  /// corner starts curving away.
+  static const double _pauseTop = 9;
+  static const double _rowTop = 14;
+
   @override
   Widget build(BuildContext context) {
+    // How far the corner has eaten into each row's own y. On a 44mm this is
+    // under the fixed insets the HUD used to hardcode and nothing moves; on a
+    // 49mm Ultra 3 the corner is 47% rounder and the pause circle has to come
+    // in ~10pt further, which is exactly the amount it used to hang off by.
+    final double pauseInset = metrics.sideInsetFor(
+      _pauseTop,
+      atLeast: 16,
+      clearance: 3,
+    );
+    final double rowInset = metrics.sideInsetFor(
+      _rowTop,
+      atLeast: 20,
+      clearance: 3,
+    );
+
     return Stack(
       children: [
         Positioned(
-          top: 14,
-          left: 20,
-          right: 38,
+          top: _rowTop,
+          left: rowInset,
+          // Clear the pause circle (18pt wide) as well as the corner.
+          right: pauseInset + 22,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -101,7 +133,9 @@ class PlayingHud extends StatelessWidget {
                   (index) => Icon(
                     Icons.favorite,
                     size: 8.5,
-                    color: index < lives ? Colors.pinkAccent : Colors.grey.shade800,
+                    color: index < lives
+                        ? Colors.pinkAccent
+                        : Colors.grey.shade800,
                   ),
                 ),
               ),
@@ -118,8 +152,8 @@ class PlayingHud extends StatelessWidget {
         ),
         if (!isTv)
           Positioned(
-            top: 9,
-            right: 16,
+            top: _pauseTop,
+            right: pauseInset,
             child: GestureDetector(
               onTap: onPause,
               behavior: HitTestBehavior.opaque,
@@ -129,14 +163,13 @@ class PlayingHud extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 0.5),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    width: 0.5,
+                  ),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(
-                  Icons.pause,
-                  size: 9,
-                  color: Colors.white,
-                ),
+                child: const Icon(Icons.pause, size: 9, color: Colors.white),
               ),
             ),
           ),
@@ -151,9 +184,13 @@ class PlayingHud extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 8,
                   fontWeight: FontWeight.w900,
-                  color: Colors.yellowAccent.withValues(alpha: (comboCount / 5.0).clamp(0.5, 1.0)),
+                  color: Colors.yellowAccent.withValues(
+                    alpha: (comboCount / 5.0).clamp(0.5, 1.0),
+                  ),
                   letterSpacing: 0.5,
-                  shadows: const [Shadow(color: Colors.yellowAccent, blurRadius: 6)],
+                  shadows: const [
+                    Shadow(color: Colors.yellowAccent, blurRadius: 6),
+                  ],
                 ),
               ),
             ),
@@ -161,7 +198,10 @@ class PlayingHud extends StatelessWidget {
         if (showLaunchHint)
           _hint(isTv ? "PRESS TO LAUNCH" : "TAP TO LAUNCH", Colors.pinkAccent),
         if (showLaserHint)
-          _hint(isTv ? "PRESS TO SHOOT LASERS" : "TAP TO SHOOT LASERS", Colors.redAccent),
+          _hint(
+            isTv ? "PRESS TO SHOOT LASERS" : "TAP TO SHOOT LASERS",
+            Colors.redAccent,
+          ),
       ],
     );
   }
@@ -271,7 +311,10 @@ class GameOverView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Text("SCORE: $score", style: const TextStyle(fontSize: 12, color: Colors.white)),
+        Text(
+          "SCORE: $score",
+          style: const TextStyle(fontSize: 12, color: Colors.white),
+        ),
         const SizedBox(height: 14),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -337,7 +380,10 @@ class GameWonView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Text("SCORE: $score", style: const TextStyle(fontSize: 12, color: Colors.white)),
+        Text(
+          "SCORE: $score",
+          style: const TextStyle(fontSize: 12, color: Colors.white),
+        ),
         const SizedBox(height: 4),
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -362,7 +408,10 @@ class GameWonView extends StatelessWidget {
                 background: const Color(0xFF0F280F),
                 autofocus: true,
                 fontSize: 9,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 radius: 15,
               ),
             const SizedBox(width: 8),

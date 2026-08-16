@@ -49,7 +49,11 @@ class MenuView extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           "HIGH SCORE: $highScore",
-          style: TextStyle(fontSize: 10, color: Colors.grey.shade400, letterSpacing: 1),
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey.shade400,
+            letterSpacing: 1,
+          ),
         ),
         const SizedBox(height: 18),
         Row(
@@ -69,7 +73,10 @@ class MenuView extends StatelessWidget {
                 accent: Colors.pinkAccent,
                 background: const Color(0xFF1A0A14),
                 fontSize: 9,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
               ),
             ],
           ],
@@ -106,10 +113,14 @@ class LevelSelectView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final int autofocusIndex =
-        kUnlockAllLevels ? 0 : maxUnlockedLevel.clamp(0, levels.length - 1);
+    final int autofocusIndex = kUnlockAllLevels
+        ? 0
+        : maxUnlockedLevel.clamp(0, levels.length - 1);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+      // 12 clears the neon ring's inner edge (kGameMargin plus half the band),
+      // which the tiles used to run underneath. One number works on every watch
+      // now that the whole scene is laid out on a fixed-height stage.
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
       child: Column(
         children: [
           const Text(
@@ -149,7 +160,11 @@ class LevelSelectView extends StatelessWidget {
           ),
           if (showBackButton)
             IconButton(
-              icon: const Icon(Icons.arrow_back_ios, size: 14, color: Colors.grey),
+              icon: const Icon(
+                Icons.arrow_back_ios,
+                size: 14,
+                color: Colors.grey,
+              ),
               onPressed: onBack,
             ),
         ],
@@ -214,15 +229,20 @@ class _LevelTileState extends State<_LevelTile> {
           color: isLocked
               ? const Color(0xFF080810)
               : _focused
-                  ? Color.lerp(const Color(0xFF0F0F28), lvl.themeColor, 0.22)
-                  : const Color(0xFF0F0F28),
+              ? Color.lerp(const Color(0xFF0F0F28), lvl.themeColor, 0.22)
+              : const Color(0xFF0F0F28),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isLocked ? Colors.grey.shade800 : lvl.themeColor,
             width: _focused ? 2.4 : 1.2,
           ),
           boxShadow: _focused
-              ? [BoxShadow(color: lvl.themeColor.withValues(alpha: 0.55), blurRadius: 8)]
+              ? [
+                  BoxShadow(
+                    color: lvl.themeColor.withValues(alpha: 0.55),
+                    blurRadius: 8,
+                  ),
+                ]
               : null,
         ),
         alignment: Alignment.center,
@@ -248,7 +268,9 @@ class _LevelTileState extends State<_LevelTile> {
                   (s) => Icon(
                     s < widget.stars ? Icons.star : Icons.star_border,
                     size: 7,
-                    color: s < widget.stars ? Colors.yellowAccent : Colors.grey.shade800,
+                    color: s < widget.stars
+                        ? Colors.yellowAccent
+                        : Colors.grey.shade800,
                   ),
                 ),
               )

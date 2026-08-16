@@ -37,6 +37,8 @@ class NeonPulse extends StatefulWidget {
     this.danger = 0.0,
     this.threat = 0.0,
     this.perilAxis = const Offset(0, 1),
+    this.cornerRadius = kGameCornerRadius,
+    this.resolution = kWatchRingResolution,
     this.enabled = true,
   });
 
@@ -55,6 +57,18 @@ class NeonPulse extends StatefulWidget {
   /// Which edge the paddle guards — the one the ball is lost through.
   /// `(0, 1)` for the bottom, `(1, 0)` for the right in vertical mode.
   final Offset perilAxis;
+
+  /// Corner radius of the ring, which on a watch is the display's own corner
+  /// minus [kGameMargin] rather than a constant — see [ScreenMetrics.playfield].
+  /// Get this wrong on an Ultra and the ring's corners are behind the bezel.
+  final double cornerRadius;
+
+  /// Fraction of the panel's own resolution to shade the ring at.
+  ///
+  /// See [kWatchRingResolution] and [kTvRingResolution] for why this is not one
+  /// number. 1.0 draws straight onto the canvas; anything less rasterises into
+  /// an offscreen and scales up.
+  final double resolution;
 
   /// Set false to skip the shader entirely.
   final bool enabled;
@@ -118,6 +132,9 @@ class _NeonPulseState extends State<NeonPulse>
         danger: widget.danger,
         threat: widget.threat,
         perilAxis: widget.perilAxis,
+        cornerRadius: widget.cornerRadius,
+        resolution: widget.resolution,
+        devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
       ),
       child: widget.child,
     );
@@ -133,6 +150,9 @@ class _NeonPulsePainter extends CustomPainter {
     required this.danger,
     required this.threat,
     required this.perilAxis,
+    required this.cornerRadius,
+    required this.resolution,
+    required this.devicePixelRatio,
   }) : super(repaint: seconds);
 
   final ui.FragmentProgram program;
@@ -143,33 +163,68 @@ class _NeonPulsePainter extends CustomPainter {
   final double threat;
   final Offset perilAxis;
 
-  /// Offscreen size per **logical** pixel of the widget.
+  /// Radius of the ring's corners, concentric with the display's own.
+  final double cornerRadius;
+
+  /// Fraction of the panel's own resolution the ring is shaded at.
+  final double resolution;
+
+  /// Physical pixels per logical pixel. Half of what decides the shaded size;
+  /// see [_toDevice] for the other half.
+  final double devicePixelRatio;
+
+  /// Device pixels per logical pixel of [size] — the full resolution the ring
+  /// could be shaded at.
   ///
-  /// Note this is not per *device* pixel: [ui.Picture.toImageSync] takes a
-  /// size in pixels while [Size] is logical, so 1.0 rasterises the ring at
-  /// 416x496 on a screen that displays 832x992. The ring is therefore drawn at
-  /// half device resolution and scaled up — that upscale is where the speed
-  /// comes from, and it costs sharpness.
+  /// It is the product of two things rather than either alone:
   ///
-  /// Measured on an Apple Watch Series 10 (menu, profile): the direct stroke
-  /// held 56.5fps with the frame fully saturated; this path holds 60.0fps with
-  /// 39% of the frame idle. Values of 0.5, 0.7, 0.85 and 1.0 all cost the same
-  /// on the Simulator, so 1.0 is the sharpest of the ones that are free.
-  /// **2.0 — true device resolution — is far worse than not doing this at
-  /// all** (13.8fps), so the offscreen only pays while it is also downscaling.
-  static const double _shadeScale = 1.0;
+  /// * the device pixel ratio — 2.0 on both a watch and an Apple TV 4K;
+  /// * whatever a [FittedBox] above us scales by. Both screens now author in a
+  ///   fixed logical stage: ~184x224 on a watch (a small scale either side of
+  ///   1.0) and ~391x220 on a TV, blown up ~4.9x to fill the panel.
+  ///
+  /// A painter's canvas is in *logical* pixels, so [Canvas.getTransform] sees
+  /// the FittedBox but not the device pixel ratio. Using either factor alone
+  /// silently quarter-resolutions one of the two screens.
+  static double _toDevice(Canvas canvas, double devicePixelRatio) {
+    // [0] is the x scale of the 4x4 column-major transform. The scene is only
+    // ever uniformly scaled and translated, so one axis is enough.
+    final double scale = canvas.getTransform()[0].abs() * devicePixelRatio;
+    return scale.isFinite && scale > 0 ? scale : devicePixelRatio;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
-    final int w = (size.width * _shadeScale).ceil();
-    final int h = (size.height * _shadeScale).ceil();
+    final double toDevice = _toDevice(canvas, devicePixelRatio);
+
+    if (resolution >= 1.0) {
+      // Straight onto the canvas, which rasterises at whatever the panel and
+      // the FittedBox above us come to — nothing to compute.
+      //
+      // The scale passed here is 1.0, not [toDevice], because `uSize` has to
+      // match whatever space `FlutterFragCoord()` reports in, and on the live
+      // canvas that is this painter's own *logical* units — the transform above
+      // is baked into the geometry, not into the fragment coordinate. (Measured
+      // on a 46mm: size 187.9x224, getTransform()[0] 1.107, dpr 2.0, and the
+      // coordinate tops out at 187.9.) Feeding it device pixels instead halves
+      // uv, which silently switches off `peril` — the shader's test for the
+      // edge that costs a life is `dot(uv, uPerilDir) > 0.62`, and half of that
+      // never gets there. The ring keeps drawing; it just stops marking the
+      // edge you lose through.
+      _paintRing(canvas, size, 1.0);
+      return;
+    }
+
+    final double shadeScale = resolution * toDevice;
+    final int w = (size.width * shadeScale).ceil();
+    final int h = (size.height * shadeScale).ceil();
     if (w <= 0 || h <= 0) {
       return;
     }
     final ui.PictureRecorder recorder = ui.PictureRecorder();
     final Canvas offscreen = Canvas(recorder);
-    offscreen.scale(_shadeScale);
-    _paintRing(offscreen, size);
+    offscreen.scale(shadeScale);
+    _paintRing(offscreen, size, shadeScale);
     final ui.Picture picture = recorder.endRecording();
     final ui.Image image = picture.toImageSync(w, h);
     picture.dispose();
@@ -182,7 +237,7 @@ class _NeonPulsePainter extends CustomPainter {
     image.dispose();
   }
 
-  void _paintRing(Canvas canvas, Size size) {
+  void _paintRing(Canvas canvas, Size size, double shadeScale) {
     // Everything here that does not vary across the ring is evaluated once,
     // not once per shaded pixel. The shader runs on the CPU on a watch, so a
     // `sin` of a frame-constant is thousands of identical transcendentals per
@@ -203,11 +258,12 @@ class _NeonPulsePainter extends CustomPainter {
     // uBreathe = 6 · uPerilBoost = 7 · uFlareP = 8..11 · uFlareI = 12..15 ·
     // uPerilDir.xy = 16,17 · uHot.rgb = 18,19,20 · uHazardPhase = 21.
     // uSize is in the shaded surface's pixels, which the offscreen scale makes
-    // smaller than the widget. Only ratios of it are used, so scaling both
-    // components leaves uv and the aspect correction unchanged.
+    // smaller than the widget on the watch and larger on TV. Only ratios of it
+    // are used, so scaling both components leaves uv and the aspect correction
+    // unchanged either way. uGuardFrac follows at 22.
     final ui.FragmentShader shader = program.fragmentShader()
-      ..setFloat(0, size.width * _shadeScale)
-      ..setFloat(1, size.height * _shadeScale)
+      ..setFloat(0, size.width * shadeScale)
+      ..setFloat(1, size.height * shadeScale)
       ..setFloat(2, bandPhase)
       ..setFloat(3, accent.r)
       ..setFloat(4, accent.g)
@@ -222,13 +278,30 @@ class _NeonPulsePainter extends CustomPainter {
       shader.setFloat(12 + i, f == null ? 0.0 : f.life.clamp(0.0, 1.0));
     }
 
+    // How far in from each end of the losing edge the paddle can travel, as a
+    // fraction of that edge's run — the shader marks exactly that stretch.
+    //
+    // The paddle's leading coordinate is clamped to
+    // `[kPaddleClamp, along - paddleWidth - kPaddleClamp]` and it spans
+    // `paddleWidth`, so what it sweeps is `[kPaddleClamp, along - kPaddleClamp]`
+    // with the width cancelling out — which is what makes one constant right
+    // here even while an expand power-up is running.
+    //
+    // The paddle guards the bottom, or the right in vertical mode, so the run
+    // is the other axis. Unitless, so the offscreen scale does not enter in.
+    final double sizeAlong = perilAxis.dx != 0 ? size.height : size.width;
+    final double guardFrac = sizeAlong <= 0
+        ? 0.0
+        : (kPaddleClamp / sizeAlong).clamp(0.0, 0.5);
+
     shader
       ..setFloat(16, perilAxis.dx)
       ..setFloat(17, perilAxis.dy)
       ..setFloat(18, hotR)
       ..setFloat(19, hotG)
       ..setFloat(20, hotB)
-      ..setFloat(21, hazardPhase);
+      ..setFloat(21, hazardPhase)
+      ..setFloat(22, guardFrac);
 
     // Thick enough to be unmistakable from across a room, still a thin band of
     // actual shaded pixels. Sits on the same path as the painter's own border.
@@ -241,7 +314,7 @@ class _NeonPulsePainter extends CustomPainter {
     );
 
     canvas.drawRRect(
-      RRect.fromRectAndRadius(border, const Radius.circular(kGameCornerRadius)),
+      RRect.fromRectAndRadius(border, Radius.circular(cornerRadius)),
       Paint()
         ..shader = shader
         ..style = PaintingStyle.stroke
