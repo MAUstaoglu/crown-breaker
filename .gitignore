@@ -19,3 +19,5 @@ watchos/ExportOptions*.plist
 .DS_Store
 .idea/
 *.iml
+.vscode/
+devtools_options.yaml

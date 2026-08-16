@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'frame_stats.dart';
 import 'game_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Run full-screen with no system overlays for an immersive watch experience.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+  // Profile builds only; see frame_stats.dart for why this is not DevTools.
+  installFrameStats();
   runApp(const CrownBreakerApp());
 }
 

@@ -35,7 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-  flutter_watchos: ^0.1.0-beta.2
+  flutter_watchos: ^0.1.0-beta.7
 
   # tvOS: platform detection + Siri Remote (RCU) input.
   flutter_tvos: ^1.1.2
