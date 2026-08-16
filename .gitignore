@@ -13,7 +13,6 @@ watchos/Flutter/
 **/DerivedData/
 *.xcarchive
 watchos/build_fw/
-watchos/ExportOptions*.plist
 
 # macOS / editors
 .DS_Store
