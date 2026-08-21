@@ -36,8 +36,15 @@ OUT="$ROOT/build/watchos_dist"
 PROJECT="$ROOT/watchos/Runner.xcodeproj"
 ARCHIVE="$OUT/Runner.xcarchive"
 
-# Must match flutter-watchos/bin/internal/engine.version.
-export WATCHOS_ENGINE_ARTIFACTS="$MONOREPO/artifacts/v0.1.7"
+# DELIBERATELY NOT the published engine. This build is the App Store
+# experiment: an Impeller-Metal engine on watchOS, which no release of
+# flutter-watchos ships yet. watchos_release_metal is watchos_release plus the
+# four Metal flags and nothing else; the app selects it at runtime through
+# FLTEnableImpeller in watchos/Runner/Info.plist.
+#
+# Point this back at a published artifacts/vX.Y.Z the moment the experiment
+# ends, or the next upload silently ships an unreleased engine.
+export WATCHOS_ENGINE_ARTIFACTS="$HOME/Developer/watchos_engine_builds/staging_release_metal"
 
 cd "$ROOT"
 
