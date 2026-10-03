@@ -71,11 +71,12 @@ tvos/
 
 ## Building
 
-> **Note:** This repository contains the application source only. The Flutter
-> watchOS and tvOS engines it runs on are separate, proprietary components and
-> are **not** included here, so the project will not build as-is. The code is
-> published for reference and to show how one Flutter app is structured for both
-> Apple Watch and Apple TV.
+> **Note:** The watch app builds with [flutter-watchos](https://flutterwatch.dev).
+> The watchOS Simulator needs no account; to run on a physical Apple Watch or
+> make a release build, sign in with GitHub (`flutter-watchos login`). The tvOS
+> engine is a separate, proprietary component and is **not** included here, so
+> `tvos/` does not build as-is. The code is published for reference and to show
+> how one Flutter app is structured for both Apple Watch and Apple TV.
 
 ```bash
 flutter-watchos build watchos --release
