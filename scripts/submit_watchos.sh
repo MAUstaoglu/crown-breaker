@@ -36,22 +36,32 @@ OUT="$ROOT/build/watchos_dist"
 PROJECT="$ROOT/watchos/Runner.xcodeproj"
 ARCHIVE="$OUT/Runner.xcarchive"
 
-# DELIBERATELY NOT the published engine. This build is the App Store
-# experiment: an Impeller-Metal engine on watchOS, which no release of
-# flutter-watchos ships yet. watchos_release_metal is watchos_release plus the
-# four Metal flags and nothing else; the app selects it at runtime through
-# FLTEnableImpeller in watchos/Runner/Info.plist.
+# The published engine: the tree the release zips on the artifact service were
+# packaged from, for the flutter-watchos release that pins it (0.1.1 pins
+# engine-a0d92ed11913). The App Store experiment with a local Impeller-Metal
+# engine is over — Impeller is the default renderer, and the published
+# `watchos_release` artifact is the Metal engine.
 #
-# Point this back at a published artifacts/vX.Y.Z the moment the experiment
-# ends, or the next upload silently ships an unreleased engine.
-export WATCHOS_ENGINE_ARTIFACTS="$HOME/Developer/watchos_engine_builds/staging_release_metal"
+# The check below stops the upload unless this tree's .engine_version is the
+# engine the CLI pins, so a stale or hand-built tree can never ship. After a
+# flutter-watchos release that moves the pin, point this at that release's
+# tree.
+#
+# The Info.plist here still names FLTEnableImpeller explicitly. It no longer
+# has to; a shipped app gets Impeller by saying nothing.
+export WATCHOS_ENGINE_ARTIFACTS="$MONOREPO/engine_artifacts_0.1.1"
 
 cd "$ROOT"
 
-PINNED="$(cat "$MONOREPO/flutter-watchos/bin/internal/engine.version")"
+PINNED="$(tr -d '[:space:]' < "$MONOREPO/flutter-watchos/bin/internal/engine.version")"
 echo "==> 0/5  Engine pin is $PINNED; using $WATCHOS_ENGINE_ARTIFACTS"
 [ -d "$WATCHOS_ENGINE_ARTIFACTS" ] || {
   echo "!! $WATCHOS_ENGINE_ARTIFACTS does not exist — fix before shipping." >&2
+  exit 1
+}
+STAMP="$( { tr -d '[:space:]' < "$WATCHOS_ENGINE_ARTIFACTS/.engine_version"; } 2>/dev/null || true)"
+[ "$STAMP" = "$PINNED" ] || {
+  echo "!! $WATCHOS_ENGINE_ARTIFACTS holds ${STAMP:-an unstamped engine}, not $PINNED — fix before shipping." >&2
   exit 1
 }
 
