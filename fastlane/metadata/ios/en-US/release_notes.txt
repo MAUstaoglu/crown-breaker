@@ -1,5 +1,1 @@
-Where it counts most.
-
-• Crown Breaker now draws on the watch's graphics hardware. The neon border, the ball trail and the brick glow cost a fraction of what they used to per frame, so the busiest levels hold their pace instead of stuttering.
-
-• Nothing about the game itself changed — it just moves the way it always should have.
+• Performance and stability improvements.
