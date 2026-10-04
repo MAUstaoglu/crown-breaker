@@ -16,13 +16,13 @@
 # each with its own release notes and screenshots.
 
 APP_ID = "com.flutter-watchos.crownbreaker".freeze
-KEY_PATH = File.expand_path("~/.appstoreconnect/private_keys/AuthKey_S7UT3Y2XSL.p8").freeze
+KEY_PATH = File.expand_path("~/.appstoreconnect/private_keys/AuthKey_QZ3WQ474DM.p8").freeze
 VERSION = "1.2.2".freeze
 BUILD = "16".freeze
 
 def asc_key
   app_store_connect_api_key(
-    key_id: "S7UT3Y2XSL",
+    key_id: "QZ3WQ474DM",
     issuer_id: "1fe37203-5f3b-475f-87a0-43725346f8c5",
     key_filepath: KEY_PATH,
     in_house: false
