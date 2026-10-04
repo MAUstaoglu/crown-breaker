@@ -180,7 +180,7 @@ class _GameScreenState extends State<GameScreen>
       // Wire up the Digital Crown platform channel using flutter_watchos (only on Watch).
       _crownSubscription = WatchCrown.instance.rotations.listen((event) {
         if (_gameState == GameState.playing) {
-          _onCrownRotated(event.delta);
+          _movePaddle(event.delta);
         } else if (_gameState == GameState.levelSelect) {
           _onLevelSelectCrownRotated(event.delta);
         }
@@ -232,11 +232,12 @@ class _GameScreenState extends State<GameScreen>
         final double dx = event.x - last;
         _lastRemoteX = event.x;
         if (_gameState == GameState.playing) {
-          // Horizontal swipe drives the paddle. Through the crown mapping
-          // (delta * 0.3) this makes one full edge-to-edge swipe (dx = 2.0)
-          // travel ~90% of the playfield — fast enough to save a corner ball,
-          // slow enough to aim (3.0 overshot at nearly 2x the screen width).
-          _onCrownRotated(dx * _screenWidth * 1.5);
+          // Horizontal swipe drives the paddle. Through the same delta
+          // mapping the crown uses (delta * 0.3), one full edge-to-edge swipe
+          // (dx = 2.0) travels ~90% of the playfield — fast enough to save a
+          // corner ball, slow enough to aim (3.0 overshot at nearly 2x the
+          // screen width).
+          _movePaddle(dx * _screenWidth * 1.5);
           _repaintNotifier.repaint();
         }
         break;
@@ -287,8 +288,10 @@ class _GameScreenState extends State<GameScreen>
     _repaintNotifier.repaint();
   }
 
-  // Map Digital Crown rotation onto paddle movement.
-  void _onCrownRotated(double delta) {
+  // Move the paddle by one input delta. Both screens land here: a Digital
+  // Crown rotation on the watch, a swipe across the Siri Remote glass on the
+  // television, already scaled to the same units.
+  void _movePaddle(double delta) {
     if (_verticalMode) {
       targetPaddleY -= delta * 0.3;
       targetPaddleY = targetPaddleY.clamp(
