@@ -35,7 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-  flutter_watchos: ^0.1.0-beta.7
+  flutter_watchos: ^0.1.0
 
   # tvOS: platform detection + Siri Remote (RCU) input.
   flutter_tvos: ^1.1.2
@@ -45,7 +45,7 @@ dependencies:
   # method-channel plugin. Both persist to NSUserDefaults, which matters most on
   # Apple TV, where the Documents directory can be purged at any time.
   shared_preferences: ^2.5.3
-  shared_preferences_watchos: ^0.1.0
+  shared_preferences_watchos: ^0.1.1
   shared_preferences_tvos: ^0.0.2
 
 dev_dependencies:

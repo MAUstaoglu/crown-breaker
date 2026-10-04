@@ -103,10 +103,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_watchos
-      sha256: bfddda87632ba8683ebf38c2fe99ef092059f940996c6f9752552fad15462fd6
+      sha256: ad29291e3c0b68fb5d86d693c40654f85b03c3afb97dc2a571cad9673aed2833
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-beta.7"
+    version: "0.1.0"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -268,10 +268,10 @@ packages:
     dependency: "direct main"
     description:
       name: shared_preferences_watchos
-      sha256: "205ac141582c6bb32dffbfd0af27a93ffd49621c2ad2e0846838fd45f89d3f87"
+      sha256: "2931ff28d0fc0fe51ef5ce1f65c8ce6b61fce1561cdfbc933d5f5606b3706a9e"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0"
+    version: "0.1.1"
   shared_preferences_web:
     dependency: transitive
     description:
