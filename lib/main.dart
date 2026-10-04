@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'frame_stats.dart';
 import 'game_screen.dart';
+import 'memory_stats.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -10,6 +11,9 @@ void main() {
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
   // Profile builds only; see frame_stats.dart for why this is not DevTools.
   installFrameStats();
+  // Likewise — and the more important of the two on a watch, where crossing
+  // the memory limit kills the process outright. See memory_stats.dart.
+  installMemoryStats();
   runApp(const CrownBreakerApp());
 }
 
