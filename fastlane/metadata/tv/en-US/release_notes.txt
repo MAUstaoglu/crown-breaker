@@ -1,0 +1,7 @@
+• The neon border now renders at the full resolution of your TV. The corners were being drawn at half resolution and scaled up, which showed as stepping along the curves on a 4K panel. They are clean now.
+
+• The warm hazard stripe marks exactly the stretch your paddle can reach, so the border tells you where to be rather than lighting up the whole frame.
+
+• Every serve leaves the paddle at a slightly different angle, so no two attempts open the same way.
+
+• Fixed a hard line that appeared at one point along the border, where the travelling light pattern failed to meet itself.

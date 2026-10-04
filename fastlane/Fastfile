@@ -1,0 +1,251 @@
+# App Store Connect metadata for Crown Breaker.
+#
+# Build *upload* lives in scripts/submit_{tvos,watchos}.sh — altool does that
+# fine. What altool cannot do is metadata: creating the App Store version
+# record, release notes, and screenshots. That is what this is for.
+#
+# The API key is referenced by *path*, never inlined. `deliver --api_key_path`
+# wants the PEM contents pasted into a JSON file; the `app_store_connect_api_key`
+# action takes `key_filepath` instead and reads it itself, the same way altool
+# does, so the private key stays where it is and out of the repo.
+#
+# Crown Breaker is one app record with two platforms:
+#   ios       — the watch-only app, which ships inside an iOS container
+#   appletvos — the Apple TV app
+# They share a version string and build number but are separate store versions,
+# each with its own release notes and screenshots.
+
+APP_ID = "com.flutter-watchos.crownbreaker".freeze
+KEY_PATH = File.expand_path("~/.appstoreconnect/private_keys/AuthKey_S7UT3Y2XSL.p8").freeze
+VERSION = "1.2.1".freeze
+BUILD = "15".freeze
+
+def asc_key
+  app_store_connect_api_key(
+    key_id: "S7UT3Y2XSL",
+    issuer_id: "1fe37203-5f3b-475f-87a0-43725346f8c5",
+    key_filepath: KEY_PATH,
+    in_house: false
+  )
+end
+
+# Read-only. Prints what App Store Connect actually holds, so a change is made
+# against the real state rather than an assumption.
+lane :info do
+  asc_key
+  app = Spaceship::ConnectAPI::App.find(APP_ID)
+  UI.message("app: #{app.name}  id=#{app.id}")
+  app.get_app_store_versions.each do |v|
+    UI.message("  version #{v.version_string.ljust(8)} #{v.platform.to_s.ljust(8)} " \
+               "state=#{v.app_store_state}")
+  end
+  UI.message("builds:")
+  Spaceship::ConnectAPI::Build.all(app_id: app.id, sort: "-uploadedDate", limit: 6).each do |b|
+    UI.message("  #{b.app_version} (#{b.version}) #{b.platform} #{b.processing_state}")
+  end
+end
+
+# Read-only check of what the 1.2.0 version records actually hold now.
+lane :verify do
+  asc_key
+  app = Spaceship::ConnectAPI::App.find(APP_ID)
+  app.get_app_store_versions.select { |v| v.version_string == VERSION }.each do |v|
+    UI.message("=== #{v.platform} #{v.version_string} — state=#{v.app_store_state} ===")
+    build = v.get_build rescue nil
+    UI.message("  build attached : #{build ? build.version : 'NONE'}")
+    v.get_app_store_version_localizations.each do |loc|
+      notes = (loc.whats_new || "").strip
+      UI.message("  notes (#{loc.locale}) : #{notes.length} chars — #{notes.lines.first.to_s.strip[0, 60]}...")
+      sets = loc.get_app_screenshot_sets
+      sets.each do |ss|
+        shots = ss.app_screenshots
+        done = shots.count { |s| s.complete? rescue s.asset_delivery_state&.dig("state") == "COMPLETE" }
+        UI.message("  screenshots    : #{ss.screenshot_display_type} — #{shots.size} uploaded (#{done} complete)")
+      end
+      UI.message("  screenshots    : NONE") if sets.empty?
+    end
+  end
+end
+
+# Creates the version record if it does not exist, sets the release notes,
+# replaces the screenshots, and attaches build 13.
+#
+# Deliberately does NOT submit for review: `submit_for_review` stays false so
+# the result can be looked at in App Store Connect first. Submission is the one
+# step here that is hard to walk back.
+#
+#   fastlane push platform:ios
+#   fastlane push platform:appletvos
+lane :push do |options|
+  platform = options[:platform] or UI.user_error!("pass platform:ios or platform:appletvos")
+  dir = platform == "ios" ? "ios" : "tv"
+
+  deliver(
+    api_key: asc_key,
+    app_identifier: APP_ID,
+    platform: platform,
+    app_version: VERSION,
+    build_number: BUILD,
+
+    metadata_path: "./fastlane/metadata/#{dir}",
+    screenshots_path: "./fastlane/screenshots/#{dir}",
+    overwrite_screenshots: true,
+
+    # The binaries are already up via altool.
+    skip_binary_upload: true,
+    skip_app_version_update: false,
+
+    # No review submission, so precheck has nothing to gate.
+    submit_for_review: false,
+    run_precheck_before_submit: false,
+
+    # Non-interactive: skip the HTML preview confirmation, which would hang.
+    force: true
+  )
+end
+
+# Two things `deliver` got wrong that only showed up on inspection:
+#
+#   * It uploads screenshots, then immediately asks App Store Connect whether
+#     they arrived. Asset processing lags, so the check says "missing", the
+#     retry uploads a second copy, and both copies end up live. Six files for
+#     three screenshots.
+#   * With `skip_binary_upload: true` it never attaches the build, so the
+#     version sits there with no binary.
+#
+# This fixes both against the real state rather than re-running deliver and
+# hoping.
+lane :fixup do
+  asc_key
+  app = Spaceship::ConnectAPI::App.find(APP_ID)
+
+  app.get_app_store_versions.select { |v| v.version_string == VERSION }.each do |v|
+    UI.message("=== #{v.platform} #{v.version_string} ===")
+
+    # Dedupe screenshots, keeping the first of each file name.
+    v.get_app_store_version_localizations.each do |loc|
+      loc.get_app_screenshot_sets.each do |ss|
+        seen = {}
+        ss.app_screenshots.each do |shot|
+          if seen[shot.file_name]
+            shot.delete!
+            UI.message("  removed duplicate #{shot.file_name}")
+          else
+            seen[shot.file_name] = true
+          end
+        end
+        UI.message("  #{ss.screenshot_display_type}: #{seen.size} kept")
+      end
+    end
+
+    # Attach the build.
+    # Filter in Ruby: the API's `version` filter does not mean the build number
+    # here, and passing it silently returns the wrong set.
+    build = Spaceship::ConnectAPI::Build
+            .all(app_id: app.id, sort: "-uploadedDate", limit: 50)
+            .find do |b|
+              b.app_version == VERSION &&
+                b.version.to_s == BUILD &&
+                b.platform.to_s == v.platform.to_s
+            end
+    if build.nil?
+      UI.error("  no build #{VERSION} (#{BUILD}) found for #{v.platform}")
+    else
+      v.select_build(build_id: build.id)
+      UI.success("  attached build #{build.app_version} (#{build.version})")
+    end
+  end
+end
+
+# Reports what still stands between the 1.2.0 versions and review.
+lane :preflight do
+  asc_key
+  app = Spaceship::ConnectAPI::App.find(APP_ID)
+  app.get_app_store_versions.select { |v| v.version_string == VERSION }.each do |v|
+    b = v.get_build rescue nil
+    UI.message("=== #{v.platform} — state=#{v.app_store_state} ===")
+    UI.message("  build          : #{b ? b.version : 'NONE'}")
+    if b
+      full = Spaceship::ConnectAPI::Build.get(build_id: b.id)
+      UI.message("  encryption      : #{full.uses_non_exempt_encryption.inspect}") rescue nil
+    end
+    UI.message("  releaseType    : #{v.release_type.inspect}")
+  end
+end
+
+# Submits both 1.2.0 versions for App Store review.
+#
+# Uses spaceship directly rather than `deliver(submit_for_review: true)`, which
+# would re-run the whole metadata upload — including the screenshot double-
+# upload that had to be cleaned up by hand the first time. This touches no
+# metadata: it answers the export question and drives the review submission.
+#
+# The sequence mirrors deliver/submit_for_review.rb: one open submission per
+# platform, add the version as an item, wait for READY_FOR_REVIEW, then submit.
+# `AppStoreVersionSubmission` is the retired API and has no .create.
+lane :submit do
+  asc_key
+  app = Spaceship::ConnectAPI::App.find(APP_ID)
+
+  app.get_app_store_versions.select { |v| v.version_string == VERSION }.each do |v|
+    platform = v.platform
+    UI.message("=== #{platform} #{v.version_string} ===")
+
+    # Hold an approved version instead of shipping it. The default,
+    # AFTER_APPROVAL, puts the build in front of every user the moment review
+    # passes — which is the wrong default for a version whose point is to find
+    # out whether review passes at all. MANUAL keeps the answer and leaves the
+    # shipping decision separate from it.
+    if v.release_type != "MANUAL"
+      v.update(attributes: { releaseType: "MANUAL" })
+      UI.message("  release type      : MANUAL (was #{v.release_type})")
+    else
+      UI.message("  release type      : already MANUAL")
+    end
+
+    build = v.get_build
+    full = Spaceship::ConnectAPI::Build.get(build_id: build.id)
+
+    # Export compliance. The tvOS target sets ITSAppUsesNonExemptEncryption in
+    # its Info.plist so its build arrives already answered; the watch plist has
+    # no such key, so its build arrives nil and blocks submission. Same app and
+    # the same answer — declared here rather than rebuilding for a plist key.
+    if full.uses_non_exempt_encryption.nil?
+      Spaceship::ConnectAPI.patch_builds(
+        build_id: build.id,
+        attributes: { usesNonExemptEncryption: false }
+      )
+      UI.message("  export compliance : declared false (was unanswered)")
+    else
+      UI.message("  export compliance : already #{full.uses_non_exempt_encryption}")
+    end
+
+    if app.get_in_progress_review_submission(platform: platform)
+      UI.important("  already in review — skipping")
+      next
+    end
+
+    submission = app.get_ready_review_submission(platform: platform, includes: "items")
+    if submission.nil?
+      submission = app.create_review_submission(platform: platform)
+      UI.message("  created review submission")
+    elsif !submission.items.empty?
+      UI.user_error!("  an open submission already holds items not created here; " \
+                     "clear it in App Store Connect first")
+    end
+
+    submission.add_app_store_version_to_review_items(app_store_version_id: v.id)
+
+    10.times do
+      state = Spaceship::ConnectAPI::AppStoreVersion.get(app_store_version_id: v.id).app_version_state
+      break if state == Spaceship::ConnectAPI::AppStoreVersion::AppVersionState::READY_FOR_REVIEW
+      UI.message("  waiting for READY_FOR_REVIEW (now #{state})...")
+      sleep(15)
+    end
+
+    submission.submit_for_review
+    UI.success("  submitted for review")
+  end
+end
+
+import 'diag.rb'

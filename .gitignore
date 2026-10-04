@@ -20,3 +20,10 @@ watchos/build_fw/
 *.iml
 .vscode/
 devtools_options.yaml
+
+# fastlane: a local copy of the App Store Connect key and run reports. The
+# Fastfile reads the key from ~/.appstoreconnect/private_keys by path; no key
+# belongs in this repository.
+fastlane/asc_api_key.json
+fastlane/report.xml
+*.p8
